@@ -315,15 +315,39 @@ final class ServerStore: ObservableObject {
     /// Строки нарочно полные, с версиями. Раньше здесь стояли огрызки вроде
     /// «Happ/1.0» и «Streisand» — панели, которые сверяют User-Agent строго,
     /// таких клиентов не узнавали и отвечали 404, хотя подписка была живой.
+    /// Версии здесь важны не меньше названий.
+    ///
+    /// Панели вроде Remnawave отдают РАЗНЫЙ список под разные клиенты и даже
+    /// под разные их версии: новым клиентам — vless с Reality, старым —
+    /// запасной набор попроще, обычно Shadowsocks. Мы представлялись
+    /// «Happ/1.16.0», и панель честно выдавала нам legacy-список: шесть
+    /// ss-серверов на node.kerimlicorp.com:1234, давно выключенных. Тот же
+    /// адрес подписки в настоящем Happ отдавал vless на nodej…:443, который
+    /// прекрасно работает.
+    ///
+    /// Со стороны это выглядело как «в Happ работает, в Zyng нет» — и мы
+    /// несколько дней искали неисправность в ядре, которого она не касалась.
     private static let userAgents = [
-        "Happ/1.16.0 (iPhone; iOS 18.0)",
-        "v2rayNG/1.9.16",
-        "Shadowrocket/2.2.28 CFNetwork/1568 Darwin/24.0.0",
-        "Streisand/1.6.30",
-        "SFI/1.11.0 (iOS)",
-        "sing-box/1.10.0",
+        "Happ/2.9.1 (iPhone; iOS 18.5)",
+        "v2rayNG/1.10.7",
+        "Streisand/2.0.1",
+        "Shadowrocket/2.2.65 CFNetwork/1568 Darwin/24.0.0",
+        "SFI/1.12.11 (iOS)",
+        "sing-box/1.13.0",
         "Zyng/1.0"
     ]
+
+    /// Есть ли в ответе современные протоколы.
+    ///
+    /// Если хоть один User-Agent получил vless/vmess/trojan, а другой — только
+    /// Shadowsocks, берём первый: это два разных набора от одной панели, и
+    /// второй у таких провайдеров почти всегда устаревший.
+    private static func hasModernKeys(_ keys: [String]) -> Bool {
+        keys.contains { key in
+            let scheme = key.prefix(while: { $0 != ":" }).lowercased()
+            return ["vless", "vmess", "trojan", "hysteria2", "hy2", "tuic"].contains(String(scheme))
+        }
+    }
 
     /// Что удалось вытащить из ответа панели.
     private struct Profile {
@@ -425,6 +449,8 @@ final class ServerStore: ObservableObject {
         var answeredWithoutKeys = false
         /// Сколько попыток подряд упёрлись в саму сеть, а не в ответ панели.
         var networkFailures = 0
+        /// Ответ со старым набором протоколов — на случай, если лучше не будет.
+        var legacy: Profile?
 
         for agent in agents {
             var request = URLRequest(url: parsed)
@@ -472,7 +498,13 @@ final class ServerStore: ObservableObject {
                 if let http = response as? HTTPURLResponse {
                     Self.readHeaders(http, into: &profile)
                 }
-                return profile
+
+                // Современный набор забираем сразу. Устаревший запоминаем и
+                // продолжаем перебор: вдруг под другим именем клиента панель
+                // отдаст нормальный. Если не отдаст — вернём хотя бы этот.
+                if Self.hasModernKeys(keys) { return profile }
+                if legacy == nil { legacy = profile }
+                continue
             } catch {
                 // Сеть недоступна — перебирать дальше бессмысленно.
                 //
@@ -505,6 +537,8 @@ final class ServerStore: ObservableObject {
                              + "it may not recognise this app")]
             )
         }
+        // Ничего современного не нашлось — отдаём то, что есть.
+        if let legacy { return legacy }
         if let lastError { throw lastError }
         return Profile()
     }
