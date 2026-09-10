@@ -261,6 +261,7 @@ struct ServerListView: View {
                            + "the Zyng core does not have. Try another tab")
                 )
             } else {
+                deadSubscriptionNote(servers)
                 ForEach(sorted(servers)) { server in
                     serverRow(server, showDelete: false)
                 }
@@ -527,6 +528,56 @@ struct ServerListView: View {
             } label: {
                 Label(tr("Скопировать ссылку", "Copy link"), systemImage: "doc.on.doc")
             }
+        }
+    }
+
+    /// Предупреждение, когда не отвечает НИ ОДИН сервер подписки.
+    ///
+    /// Один молчащий сервер — обычное дело: выключили, перегружают. Но когда
+    /// молчат все до единого, причина почти всегда одна: ссылка подписки
+    /// устарела. Провайдер перевёл людей на новые адреса, а по старой ссылке
+    /// продолжает отдаваться прежний список — он загружается, обновляется,
+    /// выглядит живым, и понять, что серверов за ним уже нет, неоткуда.
+    ///
+    /// Именно на этом мы потеряли несколько дней: приложение исправно
+    /// подключалось к серверам, которых больше не существует.
+    @ViewBuilder
+    private func deadSubscriptionNote(_ servers: [Server]) -> some View {
+        let measured = servers.compactMap { probe.latency(for: $0) }
+        let failed = measured.filter { if case .failed = $0 { return true } else { return false } }
+
+        // Только когда измерены все и не ответил никто.
+        if measured.count == servers.count, failed.count == servers.count, servers.count > 1 {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 15))
+                    .foregroundColor(JT.red)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(tr("Не отвечает ни один сервер этой подписки",
+                            "No server in this subscription responds"))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(JT.text)
+
+                    Text(tr("Скорее всего ссылка подписки устарела: провайдер перевёл "
+                          + "серверы на новые адреса. Возьми у него свежую ссылку и "
+                          + "добавь заново, а эту удали.",
+                            "The subscription link is most likely stale: the provider "
+                          + "moved the servers. Get a fresh link and add it, then "
+                          + "delete this one."))
+                        .font(.system(size: 12))
+                        .foregroundColor(JT.sub)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(JT.red.opacity(0.10))
+                    .overlay(RoundedRectangle(cornerRadius: 14)
+                        .stroke(JT.red.opacity(0.28), lineWidth: 1))
+            )
         }
     }
 
