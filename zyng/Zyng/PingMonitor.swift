@@ -19,6 +19,13 @@ final class PingMonitor: ObservableObject {
     /// Замер не прошёл — сеть есть, но ответа нет.
     @Published private(set) var failed = false
 
+    /// Почему не прошёл. Показывается рядом с «нет ответа».
+    ///
+    /// Без причины эта надпись бесполезна: она одинаково выглядит и когда
+    /// туннель не пропускает трафик, и когда конкретный адрес недоступен, и
+    /// когда сеть отвалилась совсем. А действия во всех трёх случаях разные.
+    @Published private(set) var failureReason = ""
+
     private var task: Task<Void, Never>?
 
     /// Идёт ли замер прямо сейчас.
@@ -91,6 +98,27 @@ final class PingMonitor: ObservableObject {
         task = nil
         latency = nil
         failed = false
+        failureReason = ""
+    }
+
+    /// Человеческая причина вместо системного текста вроде «-1001».
+    private static func describe(_ error: Error?) -> String {
+        guard let error = error as NSError? else { return "" }
+        guard error.domain == NSURLErrorDomain else { return "" }
+        switch error.code {
+        case NSURLErrorTimedOut:
+            return tr("сервер не отвечает", "the server is not responding")
+        case NSURLErrorNetworkConnectionLost:
+            return tr("соединение обрывается", "the connection keeps dropping")
+        case NSURLErrorNotConnectedToInternet:
+            return tr("нет сети", "no network")
+        case NSURLErrorCannotFindHost, NSURLErrorDNSLookupFailed:
+            return tr("имя не разрешается", "the name does not resolve")
+        case NSURLErrorCannotConnectToHost:
+            return tr("соединение отклонено", "connection refused")
+        default:
+            return ""
+        }
     }
 
     /// Немедленный замер — например, при возвращении из фона, когда показанное
@@ -103,6 +131,7 @@ final class PingMonitor: ObservableObject {
         guard !measuring else { return }
         measuring = true
 
+        var lastError: Error?
         let session = Self.makeSession()
         defer {
             // Обязательно: иначе сессия и её соединения живут до сборки мусора,
@@ -132,9 +161,11 @@ final class PingMonitor: ObservableObject {
 
                 latency = Int(Date().timeIntervalSince(started) * 1000)
                 failed = false
+                failureReason = ""
                 preferred = url
                 return
             } catch {
+                lastError = error
                 continue
             }
         }
@@ -142,5 +173,6 @@ final class PingMonitor: ObservableObject {
         guard !Task.isCancelled else { return }
         latency = nil
         failed = true
+        failureReason = Self.describe(lastError)
     }
 }

@@ -679,8 +679,13 @@ struct ContentView: View {
                     Text("\(ms) \(tr("мс", "ms"))")
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 } else if ping.failed {
-                    Text(tr("нет ответа", "no response"))
+                    // С причиной, если она известна: «нет ответа» само по себе
+                    // не подсказывает, что делать дальше.
+                    Text(ping.failureReason.isEmpty
+                         ? tr("нет ответа", "no response")
+                         : ping.failureReason)
                         .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
                 } else {
                     Text(tr("измеряю…", "measuring…"))
                         .font(.system(size: 12, weight: .medium))
