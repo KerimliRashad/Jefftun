@@ -67,7 +67,7 @@ enum SingBoxConfig {
                 // OneXray.
             ]
         } else {
-            outbound = try makeOutbound(from: key)
+            outbound = pinningAddress(of: try makeOutbound(from: key))
         }
 
         // Журнал ядра — в файл, явно.
@@ -132,8 +132,10 @@ enum SingBoxConfig {
                         "detour": "proxy"
                     ],
                     [
-                        // Этим разрешается имя самого VPN-сервера: запрос идёт
-                        // напрямую, мимо туннеля, ещё до того, как тот заработал.
+                        // Системный резолвер. Адрес самого VPN-сервера через
+                        // него больше НЕ разрешается — мы подставляем ядру
+                        // готовый адрес ниже, в makeOutbound. Здесь он остался
+                        // только как запасной путь для служебных нужд ядра.
                         "type": "local",
                         "tag": "dns-direct"
                     ]
@@ -212,41 +214,76 @@ enum SingBoxConfig {
         throw ParseError.malformed("нет адреса сервера")
     }
 
+    /// Подставляет в выход уже разрешённый адрес вместо имени.
+    ///
+    /// Это ключевое место. Имя сервера разрешал сам ядро — через системный
+    /// резолвер, то есть через DNS оператора связи. Оператор отвечал неправду:
+    ///
+    ///     dns: lookup succeed for node.kerimlicorp.com: 76.13.79.233
+    ///
+    /// 76.13.79.233 принадлежит Verizon — оператору самого телефона. Сервера с
+    /// флагом Латвии в американской сети оператора не стоит; это подменённый
+    /// ответ. Ядро честно шло по нему и упиралось в тишину, и так на КАЖДОМ
+    /// сервере подписки разом — при полностью живых серверах и рабочем ключе,
+    /// который в других клиентах подключается.
+    ///
+    /// Теперь имя разрешаем сами, по HTTPS, минуя оператора (см. SecureDNS), и
+    /// отдаём ядру числовой адрес. Имя при этом не теряется: оно остаётся в
+    /// server_name для TLS — без него проверка сертификата и Reality сломались
+    /// бы, ведь сервер предъявляет сертификат на имя, а не на адрес.
+    private static func pinningAddress(of outbound: [String: Any]) -> [String: Any] {
+        guard let host = outbound["server"] as? String,
+              !host.isEmpty,
+              !SecureDNS.isNumeric(host) else {
+            return outbound
+        }
+
+        let addresses = SecureDNS.resolveSync(host)
+        guard let address = addresses.first(where: { !$0.contains(":") }) ?? addresses.first else {
+            // Не разрешилось — оставляем как было. Пусть лучше попробует ядро,
+            // чем мы отдадим ему выход без адреса.
+            return outbound
+        }
+
+        var result = outbound
+        result["server"] = address
+
+        // Имя — в TLS, иначе сервер не узнает, за каким сертификатом пришли.
+        if var tls = result["tls"] as? [String: Any] {
+            if (tls["server_name"] as? String)?.isEmpty ?? true {
+                tls["server_name"] = host
+            }
+            result["tls"] = tls
+        }
+
+        // И в заголовок Host у транспортов поверх HTTP: сервер разбирает
+        // запрос по нему, а с голым адресом отдал бы чужую страницу.
+        if var transport = result["transport"] as? [String: Any] {
+            let kind = transport["type"] as? String ?? ""
+            if ["ws", "http", "httpupgrade"].contains(kind) {
+                if var headers = transport["headers"] as? [String: Any] {
+                    if headers["Host"] == nil { headers["Host"] = host }
+                    transport["headers"] = headers
+                } else if transport["host"] == nil {
+                    transport["headers"] = ["Host": host]
+                }
+            }
+            result["transport"] = transport
+        }
+
+        return result
+    }
+
     /// Числовые адреса имени: (IPv4, IPv6).
     ///
-    /// Спрашивать это можно только ДО того, как поднят туннель: после
-    /// системный резолвер направлен внутрь туннеля, а туннеля без сервера нет.
-    /// Числовой адрес возвращается как есть, без обращения к DNS.
+    /// Через собственный защищённый резолвер, а НЕ через getaddrinfo.
+    /// getaddrinfo спрашивает DNS оператора, а тот подменяет ответы: имена
+    /// серверов подписки разрешались в адреса самого оператора, и соединение
+    /// уходило в никуда. Подробности — в SecureDNS.
     static func resolve(_ host: String) -> (v4: [String], v6: [String]) {
-        var v4: [String] = []
-        var v6: [String] = []
-
-        var hints = addrinfo(ai_flags: 0, ai_family: AF_UNSPEC, ai_socktype: SOCK_STREAM,
-                             ai_protocol: 0, ai_addrlen: 0, ai_canonname: nil,
-                             ai_addr: nil, ai_next: nil)
-        var head: UnsafeMutablePointer<addrinfo>?
-        guard getaddrinfo(host, nil, &hints, &head) == 0, let first = head else {
-            return ([], [])
-        }
-        defer { freeaddrinfo(head) }
-
-        for ptr in sequence(first: first, next: { $0.pointee.ai_next }) {
-            guard let addr = ptr.pointee.ai_addr else { continue }
-            var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-            guard getnameinfo(addr, ptr.pointee.ai_addrlen, &buffer, socklen_t(buffer.count),
-                              nil, 0, NI_NUMERICHOST) == 0 else { continue }
-            // Зону вида fe80::1%en0 ни маршрут, ни конфиг ядра не принимают.
-            let text = String(cString: buffer).components(separatedBy: "%").first ?? ""
-            guard !text.isEmpty else { continue }
-
-            if ptr.pointee.ai_family == AF_INET {
-                if !v4.contains(text) { v4.append(text) }
-            } else if ptr.pointee.ai_family == AF_INET6 {
-                if !v6.contains(text) { v6.append(text) }
-            }
-        }
-
-        return (v4, v6)
+        let addresses = SecureDNS.resolveSync(host)
+        return (addresses.filter { !$0.contains(":") },
+                addresses.filter { $0.contains(":") })
     }
 
     static func makeOutbound(from key: String) throws -> [String: Any] {

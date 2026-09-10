@@ -266,7 +266,16 @@ func probeOnce(_ raw: String) async -> Int? {
         return nil
     }
 
-    let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: nwPort)
+    // Имя разрешаем сами, а не отдаём его системе.
+    //
+    // NWConnection по имени спрашивает системный резолвер, то есть DNS
+    // оператора связи. Оператор отвечал своим собственным адресом вместо
+    // настоящего, и проверка упиралась в тишину: в приложении все серверы
+    // разом значились мёртвыми, хотя тот же ключ в других клиентах работал.
+    let resolved = await SecureDNS.resolve(host)
+    let target = resolved.first(where: { !$0.contains(":") }) ?? resolved.first ?? host
+
+    let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(target), port: nwPort)
 
     let parameters = NWParameters.tcp
 
