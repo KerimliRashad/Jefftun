@@ -168,7 +168,17 @@ final class ServerStore: ObservableObject {
         guard !fresh.isEmpty else { return 0 }
 
         singleKeys.append(contentsOf: fresh)
-        if selectedRaw.isEmpty, let first = fresh.first {
+
+        // Новый ключ сразу становится выбранным.
+        //
+        // Раньше выбор менялся, только если его вообще не было. Выглядело это
+        // разумно — «не трогать чужой выбор», — а на деле означало вот что:
+        // человек вставляет новый ключ, жмёт «подключить», и приложение
+        // подключается СТАРЫМ. В журнале мы это и видели: вставлен vless на
+        // 443, а в туннель уходит ss на 1234, потому что он остался выбранным.
+        //
+        // Ключ вставляют ровно затем, чтобы им пользоваться. Других причин нет.
+        if let first = fresh.first {
             selectedRaw = first
             defaults.set(selectedRaw, forKey: Key.selected)
         }
@@ -203,10 +213,21 @@ final class ServerStore: ObservableObject {
         await refresh(sub.id)
 
         // Если подписка не отдала ни одного сервера, оставлять её бессмысленно.
-        if let updated = subscriptions.first(where: { $0.id == sub.id }),
-           updated.rawKeys.isEmpty {
+        guard let updated = subscriptions.first(where: { $0.id == sub.id }),
+              !updated.rawKeys.isEmpty else {
             subscriptions.removeAll { $0.id == sub.id }
             persist()
+            return
+        }
+
+        // Переключаемся на сервер новой подписки.
+        //
+        // По той же причине, что и с одиночным ключом: подписку добавляют,
+        // чтобы ею пользоваться. Без этого человек добавлял новую, нажимал
+        // «подключить» и попадал на прежний сервер из старой, уже мёртвой, —
+        // и выглядело это как «приложение не работает».
+        if let first = servers(in: updated).first(where: \.isSupported) {
+            select(first)
         }
     }
 
