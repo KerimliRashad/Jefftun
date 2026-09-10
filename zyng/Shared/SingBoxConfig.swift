@@ -57,15 +57,13 @@ enum SingBoxConfig {
                 "tag": "proxy",
                 "version": "5",
                 "server": "127.0.0.1",
-                "server_port": XrayBridge.socksPort,
-                // Имена разрешает sing-box, а Xray получает готовый адрес.
+                "server_port": XrayBridge.socksPort
+                // Без domain_strategy.
                 //
-                // Иначе выходит замкнутый круг: Xray просит у системы разрешить
-                // имя, системный резолвер направлен в наш же туннель, запрос
-                // возвращается к sing-box, тот отправляет его в этот самый
-                // SOCKS — и снова к Xray, который всё ещё ждёт первого ответа.
-                // Снаружи это выглядит как «подключено, но ничего не грузится».
-                "domain_strategy": "ipv4_only"
+                // Прокси не должен разрешать имена сам: имя целиком уезжает на
+                // сервер, и разрешает его сервер. Домен sing-box узнаёт из
+                // sniff и передаёт в SOCKS как есть. Так работают Happ и
+                // OneXray.
             ]
         } else {
             outbound = try makeOutbound(from: key)
@@ -624,9 +622,11 @@ enum SingBoxConfig {
         "quic", "xhttp", "splithttp", "kcp", "mkcp", "domainsocket", "ds"
     ]
 
-    /// Транспорты, которые умеет только Xray. Их исполняет второе ядро —
+    /// Транспорты, которых в sing-box нет. Только их исполняет Xray —
     /// см. XrayBridge, там же объяснено, почему без него никак.
-    static let xrayTransports: Set<String> = ["xhttp", "splithttp"]
+    static let xrayTransports: Set<String> = [
+        "xhttp", "splithttp", "kcp", "mkcp", "domainsocket", "ds"
+    ]
 
     static func supports(transport: String) -> Bool {
         let transport = transport.lowercased()
@@ -634,36 +634,30 @@ enum SingBoxConfig {
             || xrayTransports.contains(transport)
     }
 
-    /// Нужно ли для этого ключа поднимать Xray.
-    /// Протоколы, которые умеет ТОЛЬКО sing-box. Всё остальное ведёт Xray.
-    ///
-    /// В Xray их нет и не планируется: hysteria2 и tuic придуманы вне его
-    /// экосистемы. Для таких ключей sing-box работает как раньше — сам говорит
-    /// с сервером.
-    private static let singBoxOnlySchemes: Set<String> = [
-        "hysteria", "hysteria2", "hy2", "tuic", "wireguard", "wg", "sb"
-    ]
-
     /// Вести ли этот ключ через Xray.
     ///
-    /// Раньше сюда попадали только ключи с xhttp, а всё прочее исполнял
-    /// sing-box. Теперь наоборот: Xray ведёт всё, кроме того, чего он не умеет.
+    /// Только те транспорты, которых в sing-box нет физически.
     ///
-    /// Причина простая и проверенная на практике: ключи, которые у нас молчали,
-    /// в клиентах на Xray работают. Xray — родная реализация для vless, vmess,
-    /// trojan и shadowsocks: он знает все их поля, обёртки и особенности,
-    /// включая те, которых в sing-box нет вовсе или которые он понимает иначе.
-    /// Догонять его чужой реализацией — бесконечная работа, а результат человек
-    /// видит как «туннель есть, интернета нет».
+    /// В сборке 59 я развернул это правило наоборот: Xray вёл ВСЁ, кроме
+    /// hysteria и tuic. Рассуждение было такое — раз ключ работает в клиентах
+    /// на Xray, пусть и у нас его ведёт Xray. Рассуждение оказалось неверным,
+    /// и вот почему.
     ///
-    /// Разделение труда остаётся прежним: туннель по-прежнему держит sing-box —
-    /// он забирает пакеты у системы, — а разговор с сервером ведёт Xray через
-    /// локальный SOCKS. Оба живут в одном процессе расширения.
+    /// sing-box умеет привязывать исходящий сокет к настоящему сетевому
+    /// интерфейсу — у него для этого есть auto_detect_interface. Xray внутри
+    /// расширения так не умеет: он просто открывает соединение, а маршрут по
+    /// умолчанию после подъёма туннеля — сам туннель. Пока через Xray шёл один
+    /// xhttp, это всплывало редко. Когда он стал вести все ключи, круг
+    /// замкнулся на каждом, и в журнале это видно дословно:
+    ///
+    ///     155.212.204.140:1234 ... interface: utun5 ... already failing
+    ///
+    /// vless, vmess, trojan и shadowsocks sing-box поддерживает полностью,
+    /// вместе с reality, ws, grpc, http и httpupgrade, и ведёт их сам —
+    /// без петли. Xray остаётся ровно там, где он незаменим.
     static func needsXray(_ key: String) -> Bool {
-        let raw = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let schemeEnd = raw.range(of: "://") else { return false }
-        let scheme = String(raw[raw.startIndex..<schemeEnd.lowerBound]).lowercased()
-        return !singBoxOnlySchemes.contains(scheme)
+        guard let transport = try? transportName(of: key) else { return false }
+        return xrayTransports.contains(transport.lowercased())
     }
 
     /// Имя транспорта прямо из ключа — без построения всего конфига.
