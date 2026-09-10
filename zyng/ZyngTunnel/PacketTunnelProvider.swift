@@ -71,7 +71,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 throw checkError ?? Self.coreError("Конфигурация отвергнута ядром")
             }
 
-            let platform = PlatformInterface(provider: self)
+            // Адреса сервера считаем ДО поднятия туннеля: сейчас резолвер
+            // работает через обычную сеть, а после — уже через туннель,
+            // которого без сервера нет.
+            let (v4, v6) = Self.resolveServer(of: key)
+            let platform = PlatformInterface(provider: self, bypassIPv4: v4, bypassIPv6: v6)
             self.platform = platform
 
             var serverError: NSError?
@@ -125,6 +129,54 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private static func coreError(_ message: String) -> NSError {
         NSError(domain: "ZyngTunnel", code: 3,
                 userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
+    /// Адреса VPN-сервера, которые нужно вывести из туннеля.
+    ///
+    /// Возвращает списки IPv4 и IPv6. Если разобрать ключ или разрешить имя
+    /// не удалось — пустые списки: тогда всё работает как раньше, без
+    /// исключений в маршрутах, и запуск из-за этого не срывается.
+    private static func resolveServer(of key: String) -> ([String], [String]) {
+        guard let endpoint = try? SingBoxConfig.serverEndpoint(from: key) else {
+            TunnelDiagnostics.note("адрес сервера определить не удалось — маршрут не исключаю")
+            return ([], [])
+        }
+
+        var v4: [String] = []
+        var v6: [String] = []
+
+        var hints = addrinfo(ai_flags: 0, ai_family: AF_UNSPEC, ai_socktype: SOCK_STREAM,
+                             ai_protocol: 0, ai_addrlen: 0, ai_canonname: nil,
+                             ai_addr: nil, ai_next: nil)
+        var head: UnsafeMutablePointer<addrinfo>?
+
+        // Числовой адрес getaddrinfo вернёт как есть, без обращения к DNS.
+        if getaddrinfo(endpoint.host, nil, &hints, &head) == 0, let first = head {
+            defer { freeaddrinfo(head) }
+
+            for ptr in sequence(first: first, next: { $0.pointee.ai_next }) {
+                guard let addr = ptr.pointee.ai_addr else { continue }
+                var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                guard getnameinfo(addr, ptr.pointee.ai_addrlen, &host, socklen_t(host.count),
+                                  nil, 0, NI_NUMERICHOST) == 0 else { continue }
+                let text = String(cString: host)
+                if ptr.pointee.ai_family == AF_INET {
+                    if !v4.contains(text) { v4.append(text) }
+                } else if ptr.pointee.ai_family == AF_INET6 {
+                    // Зону вида fe80::1%en0 маршрут не принимает.
+                    let clean = text.components(separatedBy: "%").first ?? text
+                    if !v6.contains(clean) { v6.append(clean) }
+                }
+            }
+        }
+
+        if v4.isEmpty && v6.isEmpty {
+            TunnelDiagnostics.note("имя \(endpoint.host) не разрешилось — маршрут не исключаю")
+        } else {
+            TunnelDiagnostics.note("адрес сервера исключён из туннеля: \((v4 + v6).joined(separator: ", "))")
+        }
+
+        return (v4, v6)
     }
 
     /// Ключ приезжает из приложения через providerConfiguration.

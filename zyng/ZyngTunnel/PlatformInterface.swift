@@ -12,6 +12,27 @@ final class PlatformInterface: NSObject, LibboxPlatformInterfaceProtocol {
 
     private weak var provider: NEPacketTunnelProvider?
 
+    /// IPv4-адреса самого VPN-сервера — их нужно вывести из туннеля.
+    ///
+    /// Зачем. sing-box умеет привязывать свои исходящие сокеты к настоящему
+    /// сетевому интерфейсу (auto_detect_interface). Xray так не умеет вообще:
+    /// он просто открывает соединение, а маршрут по умолчанию после поднятия
+    /// туннеля — сам туннель. Получается круг, который в журнале выглядит так:
+    ///
+    ///     76.13.79.233:1234 ... interface: utun5 ... already failing
+    ///
+    /// Пока Xray вёл только xhttp, это всплывало редко. Когда он стал вести
+    /// все ключи (vless/vmess/trojan/tcp/http/xhttp — как в Happ и OneXray),
+    /// круг замкнулся на каждом.
+    ///
+    /// Решение то же, что у всех клиентов: адрес сервера исключается из
+    /// маршрутов туннеля. Тогда соединение с ним идёт мимо туннеля — кто бы
+    /// его ни открыл, ядро или Xray.
+    private let bypassIPv4: [String]
+
+    /// IPv6-адреса сервера, по той же причине.
+    private let bypassIPv6: [String]
+
     /// Монитор сети живёт, пока ядро на него подписано.
     private var monitor: NWPathMonitor?
     private let monitorQueue = DispatchQueue(label: "online.zyng.tunnel.path")
@@ -26,8 +47,10 @@ final class PlatformInterface: NSObject, LibboxPlatformInterfaceProtocol {
         tunnelOpened.wait(timeout: .now() + timeout) == .success
     }
 
-    init(provider: NEPacketTunnelProvider) {
+    init(provider: NEPacketTunnelProvider, bypassIPv4: [String] = [], bypassIPv6: [String] = []) {
         self.provider = provider
+        self.bypassIPv4 = bypassIPv4
+        self.bypassIPv6 = bypassIPv6
         super.init()
     }
 
@@ -69,8 +92,17 @@ final class PlatformInterface: NSObject, LibboxPlatformInterfaceProtocol {
                     ? [NEIPv4Route.default()]
                     : explicit.map { NEIPv4Route(destinationAddress: $0.address, subnetMask: $0.mask) }
 
-                ipv4.excludedRoutes = prefixes(options.getInet4RouteExcludeAddress())
+                var excluded = prefixes(options.getInet4RouteExcludeAddress())
                     .map { NEIPv4Route(destinationAddress: $0.address, subnetMask: $0.mask) }
+
+                // Адрес самого сервера — мимо туннеля. Иначе соединение с ним
+                // уходит в туннель, который без этого соединения не работает.
+                for ip in bypassIPv4 {
+                    excluded.append(NEIPv4Route(destinationAddress: ip,
+                                                subnetMask: "255.255.255.255"))
+                }
+
+                ipv4.excludedRoutes = excluded
             }
 
             settings.ipv4Settings = ipv4
@@ -92,9 +124,16 @@ final class PlatformInterface: NSObject, LibboxPlatformInterfaceProtocol {
                     : explicit.map { NEIPv6Route(destinationAddress: $0.address,
                                                  networkPrefixLength: NSNumber(value: $0.prefix)) }
 
-                ipv6.excludedRoutes = prefixes(options.getInet6RouteExcludeAddress())
+                var excluded = prefixes(options.getInet6RouteExcludeAddress())
                     .map { NEIPv6Route(destinationAddress: $0.address,
                                        networkPrefixLength: NSNumber(value: $0.prefix)) }
+
+                for ip in bypassIPv6 {
+                    excluded.append(NEIPv6Route(destinationAddress: ip,
+                                                networkPrefixLength: 128))
+                }
+
+                ipv6.excludedRoutes = excluded
             }
 
             settings.ipv6Settings = ipv6
