@@ -90,7 +90,21 @@ enum TunnelDiagnostics {
             return tr("Расширение ничего не записало.", "The extension wrote nothing.")
         }
         let lines = text.split(whereSeparator: \.isNewline).map(String.init)
-        return lines.suffix(200).joined(separator: "\n")
+
+        // Начало и конец, а не просто последние 200 строк.
+        //
+        // Ядро теперь пишет на уровне info, то есть много. Простой «хвост»
+        // вымывал бы самое ценное — отметки запуска: каким ядром пошёл ключ,
+        // какой адрес исключён из туннеля, когда он открылся. А без начала по
+        // одному хвосту не понять, о каком вообще подключении речь.
+        guard lines.count > 180 else { return lines.joined(separator: "\n") }
+
+        let head = lines.prefix(30)
+        let tail = lines.suffix(150)
+        let skipped = lines.count - head.count - tail.count
+        return (head
+                + ["", "… пропущено строк: \(skipped) …", ""]
+                + tail).joined(separator: "\n")
     }
 
     private static var tracePath: String? {
