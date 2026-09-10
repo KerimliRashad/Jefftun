@@ -892,58 +892,21 @@ struct ContentView: View {
 
         switch state {
         case .off:
-            Task {
-                // Сначала спрашиваем сервер, потом поднимаем туннель.
-                //
-                // Поднять туннель почти всегда удаётся — это местная операция,
-                // сервер в ней не участвует. Поэтому приложение показывало
-                // «Защищено» даже когда на том конце никого нет: человек видел
-                // зелёный статус, страницы не грузились, и понять причину было
-                // неоткуда. Ровно так выглядит устаревший ключ или упавшая
-                // служба на сервере.
-                //
-                // Проверка занимает пару секунд и стоит того: вместо ложного
-                // «Защищено» человек сразу читает, в чём дело.
-                status = tr("Проверяю сервер…", "Checking the server…")
-                statusIsGood = false
-
-                if await LatencyProbe.isReachable(selected.raw) {
-                    status = ""
-                    await vpn.connect(key: selected.raw)
-                    return
-                }
-
-                // Выбранный молчит — ищем живой среди остальных.
-                //
-                // Раньше на этом всё кончалось: человек упирался в один
-                // мёртвый адрес, хотя рядом в подписке полтора десятка живых.
-                // Сервер мог отвалиться, смениться порт, закрыться доступ —
-                // всё это не повод оставлять человека без связи, когда есть
-                // куда подключиться.
-                let (deadHost, deadPort) = Self.endpointText(of: selected.raw)
-                status = tr("\(deadHost):\(deadPort) не отвечает. Ищу рабочий сервер…",
-                            "\(deadHost):\(deadPort) is not answering. Looking for a working server…")
-
-                let candidates = store.allServers
-                    .filter { $0.isSupported && $0.raw != selected.raw }
-                    .map(\.raw)
-
-                guard let alive = await LatencyProbe.firstReachable(among: candidates),
-                      let server = store.allServers.first(where: { $0.raw == alive }) else {
-                    status = tr("Ни один сервер не отвечает. Похоже, на серверах "
-                              + "закрыт доступ — обнови подписку или напиши в поддержку.",
-                                "No server is answering. Access to the servers seems to "
-                              + "be blocked — refresh the subscription or contact support.")
-                    statusIsGood = false
-                    return
-                }
-
-                store.select(server)
-                status = tr("Переключился на \(server.name)",
-                            "Switched to \(server.name)")
-                statusIsGood = true
-                await vpn.connect(key: alive)
-            }
+            // Просто подключаемся.
+            //
+            // В сборке 48 здесь стояла проверка сервера ПЕРЕД подключением, и
+            // она запрещала соединение, если не отвечала сама. Это оказалось
+            // грубой ошибкой: тот же ключ прекрасно работал в других клиентах,
+            // а Zyng отказывался даже пробовать.
+            //
+            // Замер задержки — вещь приблизительная. Он бьётся в TCP-порт
+            // напрямую, а настоящий клиент подключается иначе, и у него есть
+            // свои пути: повтор, другой маршрут, обход. Отказ замера НЕ
+            // означает, что сервер недоступен, и решать за ядро он не вправе.
+            //
+            // Проверка, идёт ли трафик, осталась — но ПОСЛЕ подключения, в
+            // PingMonitor: там она никому не мешает и только сообщает.
+            Task { await vpn.connect(key: selected.raw) }
         case .connecting:
             break
         case .on:

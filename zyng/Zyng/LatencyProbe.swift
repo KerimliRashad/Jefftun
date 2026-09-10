@@ -269,8 +269,17 @@ func probeOnce(_ raw: String) async -> Int? {
     let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(host), port: nwPort)
 
     let parameters = NWParameters.tcp
-    // Нас интересует отклик сервера, а не работа через уже поднятый туннель.
-    parameters.preferNoProxies = true
+
+    // preferNoProxies убран.
+    //
+    // Стоял он ради честности замера: чтобы мерить сервер, а не туннель. Но в
+    // журнале за ним потянулись отказы системы — «NECP_CLIENT_ACTION_ADD_FLOW
+    // [22: Invalid argument]» с пометкой «prefer no proxy», — и соединение не
+    // возникало вовсе. Замер показывал «нет ответа» на сервере, к которому
+    // другие клиенты спокойно подключаются.
+    //
+    // Ложное «мёртв» хуже, чем цифра, слегка искажённая туннелем: по первой
+    // человек бросает рабочий сервер, вторая всего лишь неточна.
 
     return await withCheckedContinuation { continuation in
         let connection = NWConnection(to: endpoint, using: parameters)
