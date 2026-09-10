@@ -29,13 +29,20 @@ enum ConfigImport {
 
         // Массив — это набор профилей Xray, по одному на сервер: именно так
         // отдаёт панель, и имя сервера лежит в поле remarks.
+        var result: [String] = []
         if let list = object as? [[String: Any]] {
-            return list.flatMap { keys(fromConfig: $0) }
+            result = list.flatMap { keys(fromConfig: $0) }
+        } else if let single = object as? [String: Any] {
+            result = keys(fromConfig: single)
         }
-        if let single = object as? [String: Any] {
-            return keys(fromConfig: single)
-        }
-        return []
+
+        // Повторы выбрасываем.
+        //
+        // Один и тот же сервер нередко описан в нескольких профилях сразу —
+        // например, как запасной. В списке он выглядел бы двойником, который
+        // ничем не отличается от соседа.
+        var seen = Set<String>()
+        return result.filter { seen.insert($0).inserted }
     }
 
     private static func keys(fromConfig config: [String: Any]) -> [String] {
@@ -44,6 +51,15 @@ enum ConfigImport {
         // Имя профиля. У Xray оно в remarks, у sing-box его нет вовсе —
         // тогда возьмём тег самого выхода.
         let title = (config["remarks"] as? String) ?? ""
+
+        // Сколько настоящих выходов в профиле: от этого зависит, надо ли
+        // дописывать к имени транспорт.
+        let real = outbounds.filter { outbound in
+            let kind = ((outbound["protocol"] as? String)
+                        ?? (outbound["type"] as? String) ?? "").lowercased()
+            return !["freedom", "direct", "blackhole", "block", "dns", "loopback"].contains(kind)
+        }
+        let needsSuffix = real.count > 1
 
         var result: [String] = []
         for outbound in outbounds {
@@ -56,12 +72,39 @@ enum ConfigImport {
                 continue
             }
 
-            let name = title.isEmpty ? ((outbound["tag"] as? String) ?? "") : title
+            var name = title.isEmpty ? ((outbound["tag"] as? String) ?? "") : title
+
+            // Имя профиля одно на все его выходы, а выходов бывает три:
+            // vless по tcp, он же по xhttp и Hysteria 2. В списке получались
+            // три строки «Netherlands — быстрый», неотличимые друг от друга, —
+            // и человек не понимал, чем они разные и какую выбирать.
+            if needsSuffix, let mark = shortMark(of: outbound, kind: kind) {
+                name = name.isEmpty ? mark : "\(name) · \(mark)"
+            }
+
             if let link = link(from: outbound, kind: kind, name: name) {
                 result.append(link)
             }
         }
         return result
+    }
+
+    /// Короткая пометка транспорта для имени: XHTTP, HY2, WS и подобное.
+    /// Для обычного tcp пометка не нужна — это случай по умолчанию.
+    private static func shortMark(of outbound: [String: Any], kind: String) -> String? {
+        if kind == "hysteria" || kind == "hysteria2" { return "HY2" }
+
+        let stream = outbound["streamSettings"] as? [String: Any] ?? [:]
+        let network = ((stream["network"] as? String)
+                       ?? (outbound["transport"] as? [String: Any])?["type"] as? String
+                       ?? "tcp").lowercased()
+
+        switch network {
+        case "tcp", "raw", "none", "": return nil
+        case "xhttp", "splithttp":     return "XHTTP"
+        case "httpupgrade":            return "HTTPUpgrade"
+        default:                       return network.uppercased()
+        }
     }
 
     // MARK: - Сборка ссылки
