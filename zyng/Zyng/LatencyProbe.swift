@@ -168,6 +168,37 @@ final class LatencyProbe: ObservableObject {
     nonisolated static func isReachable(_ raw: String) async -> Bool {
         await probeOnce(raw) != nil
     }
+
+    /// Первый сервер из списка, который ответил.
+    ///
+    /// Нужен, когда выбранный сервер молчит. Раньше на этом всё и кончалось:
+    /// человек упирался в один мёртвый адрес, хотя рядом в подписке полтора
+    /// десятка живых. Перебираем пачками, а не по одному, — иначе на длинном
+    /// списке ожидание вышло бы минутным.
+    nonisolated static func firstReachable(among keys: [String],
+                                           batch: Int = 6) async -> String? {
+        var rest = keys[...]
+        while !rest.isEmpty {
+            let slice = Array(rest.prefix(batch))
+            rest = rest.dropFirst(slice.count)
+
+            let winner: String? = await withTaskGroup(of: (String, Bool).self) { group in
+                for key in slice {
+                    group.addTask { (key, await probeOnce(key) != nil) }
+                }
+                var found: String?
+                for await (key, ok) in group where ok && found == nil {
+                    found = key
+                    // Остальных в пачке добивать незачем — ответ уже есть.
+                    group.cancelAll()
+                }
+                return found
+            }
+
+            if let winner { return winner }
+        }
+        return nil
+    }
 }
 
 // MARK: - Замер одного сервера

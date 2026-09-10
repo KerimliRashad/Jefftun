@@ -910,16 +910,39 @@ struct ContentView: View {
                 if await LatencyProbe.isReachable(selected.raw) {
                     status = ""
                     await vpn.connect(key: selected.raw)
-                } else {
-                    let (host, port) = Self.endpointText(of: selected.raw)
-                    status = tr("Сервер \(host) не отвечает на порту \(port). "
-                              + "Скорее всего ключ устарел — обнови подписку "
-                              + "или выбери другой сервер.",
-                                "The server \(host) is not answering on port \(port). "
-                              + "The key is probably out of date — refresh the "
-                              + "subscription or pick another server.")
-                    statusIsGood = false
+                    return
                 }
+
+                // Выбранный молчит — ищем живой среди остальных.
+                //
+                // Раньше на этом всё кончалось: человек упирался в один
+                // мёртвый адрес, хотя рядом в подписке полтора десятка живых.
+                // Сервер мог отвалиться, смениться порт, закрыться доступ —
+                // всё это не повод оставлять человека без связи, когда есть
+                // куда подключиться.
+                let (deadHost, deadPort) = Self.endpointText(of: selected.raw)
+                status = tr("\(deadHost):\(deadPort) не отвечает. Ищу рабочий сервер…",
+                            "\(deadHost):\(deadPort) is not answering. Looking for a working server…")
+
+                let candidates = store.allServers
+                    .filter { $0.isSupported && $0.raw != selected.raw }
+                    .map(\.raw)
+
+                guard let alive = await LatencyProbe.firstReachable(among: candidates),
+                      let server = store.allServers.first(where: { $0.raw == alive }) else {
+                    status = tr("Ни один сервер не отвечает. Похоже, на серверах "
+                              + "закрыт доступ — обнови подписку или напиши в поддержку.",
+                                "No server is answering. Access to the servers seems to "
+                              + "be blocked — refresh the subscription or contact support.")
+                    statusIsGood = false
+                    return
+                }
+
+                store.select(server)
+                status = tr("Переключился на \(server.name)",
+                            "Switched to \(server.name)")
+                statusIsGood = true
+                await vpn.connect(key: alive)
             }
         case .connecting:
             break
