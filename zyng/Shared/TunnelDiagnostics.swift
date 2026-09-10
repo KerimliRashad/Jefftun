@@ -52,25 +52,59 @@ enum TunnelDiagnostics {
     /// Поэтому расширение отмечается здесь, в общей группе, а приложение эти
     /// отметки показывает. Адресов и ключей тут нет, только шаги.
     static func note(_ message: String) {
-        guard let defaults = shared else { return }
-        var lines = defaults.stringArray(forKey: "trace") ?? []
-        let time = Self.timeFormatter.string(from: Date())
-        lines.append("\(time)  \(message)")
-        // Держим последние двести строк: сюда же попадает вывод самого ядра,
-        // а он многословен. Расти без конца всё равно нельзя.
-        defaults.set(Array(lines.suffix(200)), forKey: "trace")
+        guard let path = tracePath else { return }
+        let line = "\(timeFormatter.string(from: Date()))  \(message)\n"
+        guard let data = line.data(using: .utf8) else { return }
+
+        // Дописываем в файл, а не в общие настройки.
+        //
+        // Через настройки не работало: приложение и расширение — разные
+        // процессы, и система отцепляет общий домен от службы настроек, о чём
+        // и сообщает в консоли: «Using kCFPreferencesAnyUser with a container
+        // is only allowed for System Containers, detaching from cfprefsd».
+        // Я весь день считал эту строку безобидной. На деле она означала, что
+        // записи расширения до приложения просто не доходят: дневник показывал
+        // время прошлого запуска, а вывод ядра оставался пустым.
+        //
+        // Файл в общей папке такой болезни не подвержен.
+        if let handle = FileHandle(forWritingAtPath: path) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+        } else {
+            try? data.write(to: URL(fileURLWithPath: path))
+        }
     }
 
     /// Очищает дневник. Зовётся в начале каждого запуска.
     static func clearTrace() {
-        shared?.removeObject(forKey: "trace")
+        guard let path = tracePath else { return }
+        try? FileManager.default.removeItem(atPath: path)
+        FileManager.default.createFile(atPath: path, contents: nil)
     }
 
     static func trace() -> String {
-        let lines = shared?.stringArray(forKey: "trace") ?? []
-        return lines.isEmpty
-            ? tr("Расширение ничего не записало.", "The extension wrote nothing.")
-            : lines.joined(separator: "\n")
+        guard let path = tracePath,
+              let text = try? String(contentsOfFile: path, encoding: .utf8),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return tr("Расширение ничего не записало.", "The extension wrote nothing.")
+        }
+        let lines = text.split(whereSeparator: \.isNewline).map(String.init)
+        return lines.suffix(200).joined(separator: "\n")
+    }
+
+    private static var tracePath: String? {
+        guard let container else { return nil }
+        let dir = container.appendingPathComponent("core", isDirectory: true)
+        // Папку создаём здесь же.
+        //
+        // Первая запись в дневник делается раньше, чем расширение готовит
+        // рабочие каталоги для ядра, — и без этой строки она молча пропадала
+        // вместе со всеми следующими: писать было некуда.
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return dir.appendingPathComponent("trace.log").path
     }
 
     private static let timeFormatter: DateFormatter = {

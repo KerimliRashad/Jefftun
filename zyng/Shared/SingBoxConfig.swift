@@ -338,6 +338,33 @@ enum SingBoxConfig {
             .components(separatedBy: "#").first ?? ""
         let withoutQuery = body.components(separatedBy: "?").first ?? body
 
+        // Обёртка (plugin) из строки запроса.
+        //
+        // Здесь всё, что после «?», раньше просто выбрасывалось. А именно там
+        // у ss:// живёт plugin — v2ray-plugin, obfs и подобные: сервер ждёт,
+        // что трафик придёт завёрнутым, скажем, в веб-сокет. Без обёртки мы
+        // подключались голым Shadowsocks: сервер такого не понимает и молчит.
+        // Снаружи это выглядит как «туннель есть, трафика нет, ошибок нет» —
+        // самая непонятная из всех неисправностей.
+        //
+        // Формат значения: «имя;опция=значение;опция=значение».
+        var plugin = ""
+        var pluginOpts = ""
+        if let q = body.components(separatedBy: "?").dropFirst().first {
+            for pair in q.components(separatedBy: "&") {
+                let parts = pair.components(separatedBy: "=")
+                guard parts.count >= 2, parts[0] == "plugin" else { continue }
+                let value = parts.dropFirst().joined(separator: "=")
+                    .removingPercentEncoding ?? ""
+                if let semi = value.firstIndex(of: ";") {
+                    plugin = String(value[value.startIndex..<semi])
+                    pluginOpts = String(value[value.index(after: semi)...])
+                } else {
+                    plugin = value
+                }
+            }
+        }
+
         var method = ""
         var password = ""
         var server = ""
@@ -396,7 +423,7 @@ enum SingBoxConfig {
 
         guard !server.isEmpty else { throw ParseError.malformed("в ss нет адреса сервера") }
 
-        return [
+        var out: [String: Any] = [
             "type": "shadowsocks",
             "tag": "proxy",
             "server": server,
@@ -404,6 +431,11 @@ enum SingBoxConfig {
             "method": method,
             "password": password
         ]
+        if !plugin.isEmpty {
+            out["plugin"] = plugin
+            if !pluginOpts.isEmpty { out["plugin_opts"] = pluginOpts }
+        }
+        return out
     }
 
     // MARK: - Hysteria2
