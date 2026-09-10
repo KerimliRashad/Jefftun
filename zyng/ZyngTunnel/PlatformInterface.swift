@@ -256,7 +256,7 @@ final class PlatformInterface: NSObject, LibboxPlatformInterfaceProtocol {
     /// Теперь берём первый интерфейс, ТИП которого путь действительно
     /// использует, и пропускаем туннельные: utun — это мы сами, привязка к
     /// нему замкнула бы трафик на себя.
-    private static func defaultInterface(of path: NWPath) -> String {
+    private static func defaultInterface(of path: Network.NWPath) -> String {
         let candidates = path.availableInterfaces.filter { iface in
             !iface.name.hasPrefix("utun")
                 && !iface.name.hasPrefix("ipsec")
