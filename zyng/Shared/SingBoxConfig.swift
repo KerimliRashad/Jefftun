@@ -239,11 +239,26 @@ enum SingBoxConfig {
         }
 
         let addresses = SecureDNS.resolveSync(host)
-        guard let address = addresses.first(where: { !$0.contains(":") }) ?? addresses.first else {
+        guard !addresses.isEmpty else {
             // Не разрешилось — оставляем как было. Пусть лучше попробует ядро,
             // чем мы отдадим ему выход без адреса.
+            TunnelDiagnostics.note("имя \(host) не разрешилось — отдаю ядру как есть")
             return outbound
         }
+
+        // Берём не первый попавшийся, а тот, который отвечает.
+        //
+        // За одним именем часто стоит несколько адресов, и живы не все: часть
+        // может быть выключена, часть — заблокирована в этой сети. Ядру же мы
+        // отдаём ровно один, и промах здесь означает «подключено, трафика
+        // нет». Поэтому спрашиваем каждый по очереди, коротко.
+        let port = (outbound["server_port"] as? Int) ?? 443
+        let address = addresses.first { reachable($0, port: port, timeout: 1.5) }
+            ?? addresses.first(where: { !$0.contains(":") })
+            ?? addresses[0]
+
+        TunnelDiagnostics.note("адрес сервера: \(host) → \(address) "
+                             + "(\(SecureDNS.lastSource(for: host)))")
 
         var result = outbound
         result["server"] = address
@@ -272,6 +287,57 @@ enum SingBoxConfig {
         }
 
         return result
+    }
+
+    /// Отвечает ли адрес на этом порту. Обычный сокет, без сторонних средств:
+    /// в расширении нам доступен только он, и большего здесь не нужно.
+    private static func reachable(_ address: String, port: Int, timeout: TimeInterval) -> Bool {
+        let isIPv6 = address.contains(":")
+        let family = isIPv6 ? AF_INET6 : AF_INET
+
+        let fd = socket(family, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+
+        // Неблокирующий режим: иначе connect ждёт своё, а не наше время.
+        let flags = fcntl(fd, F_GETFL, 0)
+        _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+
+        var connecting = false
+        if isIPv6 {
+            var addr = sockaddr_in6()
+            addr.sin6_len = UInt8(MemoryLayout<sockaddr_in6>.size)
+            addr.sin6_family = sa_family_t(AF_INET6)
+            addr.sin6_port = in_port_t(UInt16(port).bigEndian)
+            guard inet_pton(AF_INET6, address, &addr.sin6_addr) == 1 else { return false }
+            connecting = withUnsafePointer(to: &addr) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in6>.size)) == 0 || errno == EINPROGRESS
+                }
+            }
+        } else {
+            var addr = sockaddr_in()
+            addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+            addr.sin_family = sa_family_t(AF_INET)
+            addr.sin_port = in_port_t(UInt16(port).bigEndian)
+            guard inet_pton(AF_INET, address, &addr.sin_addr) == 1 else { return false }
+            connecting = withUnsafePointer(to: &addr) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0 || errno == EINPROGRESS
+                }
+            }
+        }
+        guard connecting else { return false }
+
+        var poller = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+        guard poll(&poller, 1, Int32(timeout * 1000)) > 0 else { return false }
+
+        // POLLOUT сам по себе ещё не успех: отказ тоже будит poll. Настоящий
+        // ответ — нулевая ошибка на сокете.
+        var error: Int32 = 0
+        var length = socklen_t(MemoryLayout<Int32>.size)
+        guard getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &length) == 0 else { return false }
+        return error == 0
     }
 
     /// Числовые адреса имени: (IPv4, IPv6).

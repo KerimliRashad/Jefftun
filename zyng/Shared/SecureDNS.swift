@@ -63,6 +63,14 @@ enum SecureDNS {
         return inet_pton(AF_INET6, host, &v6) == 1
     }
 
+    /// Кто ответил на последний запрос — «защищённый DNS» или «система».
+    /// Нужно только для дневника: по нему видно, сработал ли обход подмены.
+    private static let sourceCache = Cache()
+
+    static func lastSource(for host: String) -> String {
+        sourceCache.value(host)?.first ?? "?"
+    }
+
     /// Адреса имени. Пустой список — не удалось.
     static func resolve(_ host: String) async -> [String] {
         if isNumeric(host) { return [host] }
@@ -73,6 +81,7 @@ enum SecureDNS {
             let addresses = await query(host, via: resolver)
             guard !addresses.isEmpty else { continue }
             cache.store(addresses, for: host)
+            sourceCache.store(["защищённый DNS"], for: host)
             return addresses
         }
 
@@ -82,7 +91,10 @@ enum SecureDNS {
         // хуже: бывают сети, где наружу пускают только через свой прокси, и
         // тогда DoH не пройдёт, а обычный запрос — да.
         let system = systemResolve(host)
-        if !system.isEmpty { cache.store(system, for: host) }
+        if !system.isEmpty {
+            cache.store(system, for: host)
+            sourceCache.store(["системный DNS — возможна подмена"], for: host)
+        }
         return system
     }
 
