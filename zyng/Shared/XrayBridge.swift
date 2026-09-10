@@ -41,8 +41,13 @@ enum XrayBridge {
     /// стандартного.
     static let socksPort = 10808
 
-    /// Версия протокола libXray. Соответствует тегу, закреплённому в core/go.mod.
-    private static let apiVersion = 1
+    /// Версия договора с libXray. Обязана совпадать с той, что зашита в ядре,
+    /// иначе оно отвечает «unsupported apiVersion» и не делает ничего.
+    ///
+    /// Была 1 — для libXray v1.260728.0. В v1.260909.0 стало 3, и заодно
+    /// поменялся способ запуска: отдельного runXrayFromJson больше нет, а
+    /// runXray теперь принимает сам конфиг в поле xrayJson, а не путь к файлу.
+    private static let apiVersion = 3
 
     enum Failure: LocalizedError {
         case unavailable
@@ -85,12 +90,9 @@ enum XrayBridge {
     private static func invoke(method: String, payload: [String: Any]) throws -> Any? {
         #if canImport(Libcore)
         let request: [String: Any] = [
-            // Версию проверяет само ядро и отвергает чужую.
-            //
-            // Именно 1, а не 2. Двойка стоит в главной ветке libXray, но у нас
-            // закреплён тег v1.260728.0, а он принимает только 0 или 1 и
-            // отвечает «unsupported apiVersion». Число обязано соответствовать
-            // версии из core/go.mod — меняются они вместе.
+            // Версию проверяет само ядро и отвергает чужую — см. apiVersion
+            // выше. Число обязано соответствовать версии libXray из
+            // core/go.mod: меняются они только вместе.
             "apiVersion": Self.apiVersion,
             "method": method,
             "payload": payload
@@ -265,14 +267,12 @@ enum XrayBridge {
     static func start(link: String) throws {
         let config = try makeConfig(from: link)
 
-        // runXrayFromJson, а не runXray.
+        // Конфиг передаётся сам, а не путём к файлу.
         //
-        // runXray в этой версии принимает ПУТЬ К ФАЙЛУ, а не сам конфиг — то же
-        // и у testXray. Значит, чтобы ими воспользоваться, конфиг пришлось бы
-        // класть на диск, а в нём пароль и UUID сервера. Держать это в файле
-        // ради проверки не стоит: ошибку конфигурации запуск возвращает и сам,
-        // с тем же текстом от ядра.
-        try invoke(method: "runXrayFromJson", payload: ["configJSON": config])
+        // Раньше приходилось звать отдельный runXrayFromJson: обычный runXray
+        // принимал ПУТЬ, и ради него конфиг с паролем и UUID пришлось бы
+        // класть на диск. В новом ядре этой развилки нет.
+        try invoke(method: "runXray", payload: ["xrayJson": config])
     }
 
     static func stop() {

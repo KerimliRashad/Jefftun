@@ -30,10 +30,11 @@ enum ConfigImport {
         // Массив — это набор профилей Xray, по одному на сервер: именно так
         // отдаёт панель, и имя сервера лежит в поле remarks.
         var result: [String] = []
+        var signatures = Set<String>()
         if let list = object as? [[String: Any]] {
-            result = list.flatMap { keys(fromConfig: $0) }
+            result = list.flatMap { keys(fromConfig: $0, usedSignatures: &signatures) }
         } else if let single = object as? [String: Any] {
-            result = keys(fromConfig: single)
+            result = keys(fromConfig: single, usedSignatures: &signatures)
         }
 
         // Повторы выбрасываем.
@@ -45,21 +46,13 @@ enum ConfigImport {
         return result.filter { seen.insert($0).inserted }
     }
 
-    private static func keys(fromConfig config: [String: Any]) -> [String] {
+    private static func keys(fromConfig config: [String: Any],
+                             usedSignatures: inout Set<String>) -> [String] {
         guard let outbounds = config["outbounds"] as? [[String: Any]] else { return [] }
 
         // Имя профиля. У Xray оно в remarks, у sing-box его нет вовсе —
         // тогда возьмём тег самого выхода.
         let title = (config["remarks"] as? String) ?? ""
-
-        // Сколько настоящих выходов в профиле: от этого зависит, надо ли
-        // дописывать к имени транспорт.
-        let real = outbounds.filter { outbound in
-            let kind = ((outbound["protocol"] as? String)
-                        ?? (outbound["type"] as? String) ?? "").lowercased()
-            return !["freedom", "direct", "blackhole", "block", "dns", "loopback"].contains(kind)
-        }
-        let needsSuffix = real.count > 1
 
         var result: [String] = []
         for outbound in outbounds {
@@ -72,15 +65,23 @@ enum ConfigImport {
                 continue
             }
 
-            var name = title.isEmpty ? ((outbound["tag"] as? String) ?? "") : title
+            let name = title.isEmpty ? ((outbound["tag"] as? String) ?? "") : title
 
-            // Имя профиля одно на все его выходы, а выходов бывает три:
-            // vless по tcp, он же по xhttp и Hysteria 2. В списке получались
-            // три строки «Netherlands — быстрый», неотличимые друг от друга, —
-            // и человек не понимал, чем они разные и какую выбирать.
-            if needsSuffix, let mark = shortMark(of: outbound, kind: kind) {
-                name = name.isEmpty ? mark : "\(name) · \(mark)"
-            }
+            // Транспорт в имя НЕ дописываем.
+            //
+            // Сначала я так и сделал — и получилось «Latvia - быстрый · XH…»:
+            // строка не влезала и обрывалась на середине. А главное, дописывать
+            // было незачем: под именем и так стоит подпись «VLESS · XHTTP».
+            // Различать записи нужно было не глазами по имени, а в самом
+            // списке — этим занимается отбор ниже.
+            //
+            // Отбираем по тройке «имя + протокол + транспорт». Профиль
+            // «Автовыбор» описывает по одному выходу на страну, и все они
+            // называются одинаково — в списке выходило шесть неотличимых строк
+            // «🚀 Автовыбор · HY2». Каждая из этих стран и так есть в списке
+            // отдельной записью, поэтому от «Автовыбора» достаточно одной.
+            let signature = "\(name)|\(kind)|\(shortMark(of: outbound, kind: kind) ?? "tcp")"
+            guard usedSignatures.insert(signature).inserted else { continue }
 
             if let link = link(from: outbound, kind: kind, name: name) {
                 result.append(link)

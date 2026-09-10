@@ -170,6 +170,13 @@ func parseServer(_ raw: String) -> Server? {
 /// Транспорт указывают по-разному: в vmess он внутри base64-JSON, у остальных —
 /// параметром `type` в ссылке.
 private func transportOf(_ raw: String, scheme: String) -> String {
+    // Hysteria 2 и TUIC живут поверх QUIC, то есть поверх UDP.
+    //
+    // В списке у них стояло «HYSTERIA2 · TCP» — прямая неправда: параметра
+    // type в таких ссылках нет, и мы по умолчанию писали tcp. Человек видел
+    // «TCP» рядом с пометкой «UDP» справа и справедливо не понимал, чему верить.
+    if ["hysteria2", "hy2", "tuic"].contains(scheme) { return "quic" }
+
     if scheme == "vmess" {
         guard let data = Data(base64Encoded: padBase64(String(raw.dropFirst("vmess://".count)))),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
