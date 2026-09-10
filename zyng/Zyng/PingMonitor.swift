@@ -36,6 +36,9 @@ final class PingMonitor: ObservableObject {
     /// закончил последним, а не от того, кто начал позже.
     private var measuring = false
 
+    /// Выкладывали ли уже журнал расширения в консоль за это подключение.
+    private var dumpedDiagnostics = false
+
     /// Адреса, отдающие крошечный ответ. Пробуем по очереди: часть из них
     /// бывает недоступна у отдельных провайдеров или за конкретным сервером,
     /// и тогда замер врал бы «нет ответа» при работающем туннеле.
@@ -96,6 +99,7 @@ final class PingMonitor: ObservableObject {
     func stop() {
         task?.cancel()
         task = nil
+        dumpedDiagnostics = false
         latency = nil
         failed = false
         failureReason = ""
@@ -182,5 +186,20 @@ final class PingMonitor: ObservableObject {
         // он, не сошёлся ли пароль. Пока туннель поднят, а трафика нет, это
         // единственный источник правды, и человеку нужно показывать именно его.
         failureReason = TunnelDiagnostics.diagnosis() ?? Self.describe(lastError)
+
+        // Печатаем журнал расширения в консоль приложения — один раз.
+        //
+        // Расширение пишет свой дневник в общую папку, и открыть его можно
+        // только вручную: Настройки → Журнал ядра. На деле человек присылает
+        // консоль Xcode, а в неё расширение не пишет вовсе — это отдельный
+        // процесс. Мы раз за разом разбирали неисправность по половине картины.
+        //
+        // Теперь, когда туннель поднят, а трафика нет, приложение само
+        // выкладывает журнал туда, где его точно увидят.
+        if !dumpedDiagnostics {
+            dumpedDiagnostics = true
+            NSLog("🟠 Zyng: ---- ход запуска туннеля ----\n%@", TunnelDiagnostics.trace())
+            NSLog("🟠 Zyng: ---- вывод ядра ----\n%@", TunnelDiagnostics.coreLog(limit: 40))
+        }
     }
 }
