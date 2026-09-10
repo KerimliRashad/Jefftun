@@ -157,6 +157,17 @@ final class LatencyProbe: ObservableObject {
     func clear() {
         results = [:]
     }
+
+    /// Отвечает ли сервер вообще. Один быстрый заход, без повторов.
+    ///
+    /// Нужен перед подключением. Само по себе поднятие туннеля почти всегда
+    /// удаётся — это ведь местная операция, — и приложение показывает
+    /// «Защищено» даже когда сервера на том конце нет. Человек видит зелёный
+    /// статус, страницы не грузятся, и понять причину неоткуда. Поэтому
+    /// спрашиваем сервер заранее и говорим прямо.
+    nonisolated static func isReachable(_ raw: String) async -> Bool {
+        await probeOnce(raw) != nil
+    }
 }
 
 // MARK: - Замер одного сервера
@@ -206,7 +217,7 @@ private func probeServer(_ raw: String) async -> Latency {
     return best.map(Latency.ms) ?? .failed
 }
 
-private func probeOnce(_ raw: String) async -> Int? {
+func probeOnce(_ raw: String) async -> Int? {
     guard let (host, port) = probeEndpoint(raw),
           let nwPort = NWEndpoint.Port(rawValue: port) else {
         return nil

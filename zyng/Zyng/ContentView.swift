@@ -258,6 +258,21 @@ struct ContentView: View {
                 statusPill.padding(.top, 20)
                 timerLabel.padding(.top, 10)
                 pingLabel.padding(.top, 8)
+                // Своё сообщение: проверка сервера перед подключением.
+                //
+                // Показываем здесь же, где ошибки ядра, — человек смотрит в
+                // одно место и не гадает, почему ничего не произошло.
+                if !status.isEmpty {
+                    Text(status)
+                        .foregroundColor(statusIsGood ? JT.green : JT.accent)
+                        .font(.system(size: 13, weight: .medium))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 8)
+                        .padding(.horizontal, 24)
+                        .transition(.opacity)
+                }
+
                 if let err = vpn.errorMessage {
                     // Сообщение от ядра бывает длинным, а скопировать его нужно
                     // целиком — иначе причину сбоя не разобрать.
@@ -336,6 +351,8 @@ struct ContentView: View {
             ping.start()
             lastReportedLatency = nil
             startLiveActivity()
+            // Сообщение о проверке больше не нужно: соединение состоялось.
+            status = ""
         case .connecting, .reasserting:
             // Анимация кольца сама ускоряется по состоянию — здесь делать нечего.
             break
@@ -875,12 +892,48 @@ struct ContentView: View {
 
         switch state {
         case .off:
-            Task { await vpn.connect(key: selected.raw) }
+            Task {
+                // Сначала спрашиваем сервер, потом поднимаем туннель.
+                //
+                // Поднять туннель почти всегда удаётся — это местная операция,
+                // сервер в ней не участвует. Поэтому приложение показывало
+                // «Защищено» даже когда на том конце никого нет: человек видел
+                // зелёный статус, страницы не грузились, и понять причину было
+                // неоткуда. Ровно так выглядит устаревший ключ или упавшая
+                // служба на сервере.
+                //
+                // Проверка занимает пару секунд и стоит того: вместо ложного
+                // «Защищено» человек сразу читает, в чём дело.
+                status = tr("Проверяю сервер…", "Checking the server…")
+                statusIsGood = false
+
+                if await LatencyProbe.isReachable(selected.raw) {
+                    status = ""
+                    await vpn.connect(key: selected.raw)
+                } else {
+                    let (host, port) = Self.endpointText(of: selected.raw)
+                    status = tr("Сервер \(host) не отвечает на порту \(port). "
+                              + "Скорее всего ключ устарел — обнови подписку "
+                              + "или выбери другой сервер.",
+                                "The server \(host) is not answering on port \(port). "
+                              + "The key is probably out of date — refresh the "
+                              + "subscription or pick another server.")
+                    statusIsGood = false
+                }
+            }
         case .connecting:
             break
         case .on:
             vpn.disconnect()
         }
+    }
+
+    /// Адрес и порт ключа для сообщения об ошибке. Без пароля и UUID.
+    private static func endpointText(of raw: String) -> (String, String) {
+        guard let end = try? SingBoxConfig.serverEndpoint(from: raw) else {
+            return ("—", "—")
+        }
+        return (end.host, String(end.port))
     }
 
     private func timeString(_ s: Int) -> String {
