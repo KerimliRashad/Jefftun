@@ -104,7 +104,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: online.zyng.Zyng
         PRODUCT_NAME: Zyng
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "41"
+        CURRENT_PROJECT_VERSION: "42"
         CODE_SIGN_ENTITLEMENTS: Zyng/Zyng.entitlements
         INFOPLIST_FILE: Zyng/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -142,7 +142,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: online.zyng.Zyng.ZyngTunnel
         PRODUCT_NAME: ZyngTunnel
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "41"
+        CURRENT_PROJECT_VERSION: "42"
         CODE_SIGN_ENTITLEMENTS: ZyngTunnel/ZyngTunnel.entitlements
         INFOPLIST_FILE: ZyngTunnel/Info.plist
         GENERATE_INFOPLIST_FILE: NO
@@ -158,7 +158,13 @@ targets:
         # таргета, который вообще видит заголовок. Наш собственный код
         # проверяется как обычно, а чужое неисправимое предупреждение больше не
         # прячет за собой настоящие.
+        # Через -Xcc, а не только OTHER_CFLAGS. Заголовок компилируется не как
+        # обычный файл на C, а внутри модуля, который подключает Swift, — и
+        # OTHER_CFLAGS до него не доходит. Именно поэтому первая попытка
+        # заглушить это предупреждение ничего не изменила: флаг был верный, но
+        # доставлялся не тому компилятору.
         OTHER_CFLAGS: [-Wno-nullability]
+        OTHER_SWIFT_FLAGS: [-Xcc, -Wno-nullability]
 
   ZyngWidgets:
     type: app-extension
@@ -186,7 +192,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: online.zyng.Zyng.ZyngWidgets
         PRODUCT_NAME: ZyngWidgets
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "41"
+        CURRENT_PROJECT_VERSION: "42"
         CODE_SIGN_ENTITLEMENTS: ZyngWidgets/ZyngWidgets.entitlements
         INFOPLIST_FILE: ZyngWidgets/Info.plist
         GENERATE_INFOPLIST_FILE: NO
