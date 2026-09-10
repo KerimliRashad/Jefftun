@@ -35,6 +35,9 @@ final class PlatformInterface: NSObject, LibboxPlatformInterfaceProtocol {
 
     /// Монитор сети живёт, пока ядро на него подписано.
     private var monitor: NWPathMonitor?
+
+    /// Последний интерфейс, о котором мы сообщили ядру.
+    private var lastInterface: String?
     private let monitorQueue = DispatchQueue(label: "online.zyng.tunnel.path")
 
     /// Ядро открывает туннель своим потоком уже после того, как запуск сервиса
@@ -205,12 +208,15 @@ final class PlatformInterface: NSObject, LibboxPlatformInterfaceProtocol {
         let ready = DispatchSemaphore(value: 0)
         var reported = false
 
-        monitor.pathUpdateHandler = { path in
-            var name = ""
-            if let iface = path.availableInterfaces.first {
-                name = iface.name
-            }
+        monitor.pathUpdateHandler = { [weak self] path in
+            let name = Self.defaultInterface(of: path)
             let index = name.isEmpty ? 0 : Int32(if_nametoindex(name))
+
+            // Сообщаем только о смене — иначе дневник забьётся повторами.
+            if name != self?.lastInterface {
+                self?.lastInterface = name
+                TunnelDiagnostics.note("сеть идёт через \(name.isEmpty ? "—" : name)")
+            }
 
             listener.updateDefaultInterface(
                 name,
@@ -229,6 +235,41 @@ final class PlatformInterface: NSObject, LibboxPlatformInterfaceProtocol {
 
         monitor.start(queue: monitorQueue)
         _ = ready.wait(timeout: .now() + 3)
+    }
+
+    /// Какой интерфейс сейчас реально несёт трафик.
+    ///
+    /// ЗДЕСЬ БЫЛ ГЛАВНЫЙ ДЕФЕКТ. Стояло `path.availableInterfaces.first` —
+    /// то есть «первый из списка». Список этот не отсортирован по тому, каким
+    /// интерфейсом система пользуется: он просто перечисляет доступные, и en0
+    /// (Wi-Fi) стоит в нём первым практически всегда — даже когда телефон
+    /// сидит на сотовой связи, а к Wi-Fi лишь подключён без интернета или не
+    /// подключён вовсе.
+    ///
+    /// Ядро получало от нас «работай через en0», честно привязывало туда сокет
+    /// и упиралось в тишину. В журнале это и было видно дословно:
+    ///
+    ///     dial en0 (5): dial tcp 76.13.79.233:1234: i/o timeout
+    ///
+    /// — телефон в этот момент был на 5G. Сервер был жив и ни при чём.
+    ///
+    /// Теперь берём первый интерфейс, ТИП которого путь действительно
+    /// использует, и пропускаем туннельные: utun — это мы сами, привязка к
+    /// нему замкнула бы трафик на себя.
+    private static func defaultInterface(of path: NWPath) -> String {
+        let candidates = path.availableInterfaces.filter { iface in
+            !iface.name.hasPrefix("utun")
+                && !iface.name.hasPrefix("ipsec")
+                && !iface.name.hasPrefix("lo")
+        }
+
+        if let used = candidates.first(where: { path.usesInterfaceType($0.type) }) {
+            return used.name
+        }
+
+        // Путь ничего не подтвердил — отдаём первый непустой, чтобы ядро не
+        // осталось совсем без интерфейса.
+        return candidates.first?.name ?? ""
     }
 
     func closeDefaultInterfaceMonitor(_ listener: LibboxInterfaceUpdateListenerProtocol?) throws {
