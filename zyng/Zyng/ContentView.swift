@@ -724,6 +724,49 @@ struct ContentView: View {
         }
     }
 
+    /// Подключается к выбранному, а если он молчит — к живому из списка.
+    ///
+    /// Зачем это здесь. Выбранный сервер хранится отдельно от списка и сам
+    /// не меняется. Человек добавил новую подписку, старую удалил, — а в
+    /// подключение по-прежнему уходил прежний ключ: он остался выбранным.
+    /// В журнале это выглядело как «протокол ss, node.kerimlicorp.com:1234»,
+    /// когда в приложении уже лежал совсем другой сервер, vless на 443.
+    ///
+    /// Отказ проверки САМ ПО СЕБЕ ничего не запрещает — в сборке 48 я на этом
+    /// обжёгся: тогда проверка запрещала подключение, и Zyng отказывался даже
+    /// пробовать ключ, прекрасно работавший в других клиентах. Здесь иначе:
+    /// не отвечает выбранный, но отвечает другой — идём к другому; не отвечает
+    /// никто — всё равно подключаемся к выбранному, как и раньше.
+    private func connectPickingAlive(preferred: Server) async {
+        // Протоколы поверх UDP проверять TCP-соединением нельзя: порт для TCP
+        // закрыт, и живой сервер выглядел бы мёртвым.
+        guard !preferred.usesDatagrams else {
+            await vpn.connect(key: preferred.raw)
+            return
+        }
+
+        if await LatencyProbe.isReachable(preferred.raw) {
+            await vpn.connect(key: preferred.raw)
+            return
+        }
+
+        let others = store.allServers
+            .filter { $0.isSupported && !$0.usesDatagrams && $0.raw != preferred.raw }
+            .map(\.raw)
+
+        if let alive = await LatencyProbe.firstReachable(among: others),
+           let server = store.server(for: alive) {
+            store.select(server)
+            rescueNote = tr("«\(preferred.name)» не отвечает — подключаюсь к «\(server.name)».",
+                            "«\(preferred.name)» is not responding — connecting to «\(server.name)» instead.")
+            await vpn.connect(key: alive)
+            return
+        }
+
+        // Никто не ответил — не мешаем. Пусть решает ядро: у него свои пути.
+        await vpn.connect(key: preferred.raw)
+    }
+
     /// Обновляет подписки и переключается на первый ответивший сервер.
     ///
     /// Порядок здесь не случайный. Сначала подписка: запись о сервере могла
@@ -1014,7 +1057,7 @@ struct ContentView: View {
             //
             // Проверка, идёт ли трафик, осталась — но ПОСЛЕ подключения, в
             // PingMonitor: там она никому не мешает и только сообщает.
-            Task { await vpn.connect(key: selected.raw) }
+            Task { await connectPickingAlive(preferred: selected) }
         case .connecting:
             break
         case .on:
