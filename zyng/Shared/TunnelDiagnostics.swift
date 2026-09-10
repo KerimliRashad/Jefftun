@@ -36,6 +36,25 @@ enum TunnelDiagnostics {
         container?.appendingPathComponent("core/stderr.log").path
     }
 
+    /// Куда ядро пишет СВОЙ журнал — тот, что задаётся полем log.output.
+    ///
+    /// Это и была причина вечного «Ядро ничего не записало». Мы перенаправляли
+    /// stderr и надеялись поймать журнал там. Но sing-box внутри расширения в
+    /// stderr не пишет: он отдаёт строки своей служебной части, а та рассылает
+    /// их подключённым клиентам по служебному каналу. Приложение таким
+    /// клиентом не было, и строки уходили в пустоту.
+    ///
+    /// Через stderr по-прежнему ловится паника Go — она случается мимо любого
+    /// журнала, — а обычный вывод забираем отсюда.
+    static var coreLogPath: String? {
+        guard let container else { return nil }
+        let dir = container.appendingPathComponent("core", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return dir.appendingPathComponent("core.log").path
+    }
+
     private static var container: URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
     }
@@ -143,7 +162,7 @@ enum TunnelDiagnostics {
 
         // Старый вывод ядра тоже убираем, иначе после успешного запуска
         // покажется ошибка от прошлой попытки.
-        if let path = stderrPath {
+        for path in [stderrPath, coreLogPath].compactMap({ $0 }) {
             try? FileManager.default.removeItem(atPath: path)
         }
     }
@@ -158,11 +177,13 @@ enum TunnelDiagnostics {
     /// внятное про сервер или сертификат, просто это оседает в файле и никем
     /// не читается. Здесь мы его достаём.
     static func coreLog(limit: Int = 60) -> String {
-        guard let path = stderrPath,
-              let text = try? String(contentsOfFile: path, encoding: .utf8) else {
-            return tr("Ядро ничего не записало.", "The core wrote nothing.")
+        // Сначала собственный журнал ядра, затем stderr: там оседает паника Go,
+        // которая случается мимо журнала.
+        var lines: [String] = []
+        for path in [coreLogPath, stderrPath].compactMap({ $0 }) {
+            guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+            lines += text.split(whereSeparator: \.isNewline).map(String.init)
         }
-        let lines = text.split(whereSeparator: \.isNewline).map(String.init)
         guard !lines.isEmpty else {
             return tr("Ядро ничего не записало.", "The core wrote nothing.")
         }
@@ -182,10 +203,11 @@ enum TunnelDiagnostics {
     /// Из вывода ядра берём самое информативное: строку паники, если она есть,
     /// иначе последние несколько строк.
     private static func coreOutputSummary(limit: Int = 6) -> String? {
-        guard let path = stderrPath,
-              let text = try? String(contentsOfFile: path, encoding: .utf8) else {
-            return nil
+        var text = ""
+        for path in [coreLogPath, stderrPath].compactMap({ $0 }) {
+            text += (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
         }
+        guard !text.isEmpty else { return nil }
 
         let lines = text
             .split(whereSeparator: \.isNewline)

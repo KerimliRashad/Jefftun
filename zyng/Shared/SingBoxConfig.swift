@@ -46,6 +46,7 @@ enum SingBoxConfig {
     /// резолвинг целиком: туннель поднят, ошибок нет, сайты не открываются.
     /// В OneXray и Happ такой настройки на виду нет по той же причине.
     static func makeConfig(from key: String,
+                           logPath: String? = nil,
                            verbose: Bool = false) throws -> String {
         // Транспорт, которого нет в этом ядре, исполняет Xray. Тогда sing-box
         // остаётся туннелем, а весь трафик отдаёт в локальный SOCKS, который
@@ -69,7 +70,13 @@ enum SingBoxConfig {
             outbound = try makeOutbound(from: key)
         }
 
-        let config: [String: Any] = [
+        // Журнал ядра — в файл, явно.
+        //
+        // Без этого поля sing-box внутри расширения не пишет никуда, куда мы
+        // могли бы заглянуть: строки уходят его служебной части, а та рассылает
+        // их подключённым клиентам. Приложение таким клиентом не было — отсюда
+        // и вечное «Ядро ничего не записало» при полностью исправном ядре.
+        var log: [String: Any] = [
             // Уровень info, а не warn.
             //
             // Раньше здесь стоял warn — ради приватности: на info ядро пишет
@@ -83,7 +90,13 @@ enum SingBoxConfig {
             // На info видно главное: с каким выходом ядро работает, доходит ли
             // до сервера и что отвечает. Журнал лежит только на устройстве,
             // ограничен 200 строками и перезаписывается при каждом запуске.
-            "log": ["level": verbose ? "debug" : "info", "timestamp": true],
+            "level": verbose ? "debug" : "info",
+            "timestamp": true
+        ]
+        if let logPath { log["output"] = logPath }
+
+        let config: [String: Any] = [
+            "log": log,
 
             // DNS. Ничего лишнего.
             //

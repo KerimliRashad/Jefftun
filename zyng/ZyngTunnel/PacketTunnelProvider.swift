@@ -43,7 +43,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
             let verbose = readFlag("verbose")
             if verbose { NSLog("🟣 Zyng: подробный журнал ядра включён") }
-            let config = try SingBoxConfig.makeConfig(from: key, verbose: verbose)
+            let config = try SingBoxConfig.makeConfig(from: key,
+                                                     logPath: TunnelDiagnostics.coreLogPath,
+                                                     verbose: verbose)
             TunnelDiagnostics.note("конфиг собран, протокол \(key.prefix(while: { $0 != ":" }))")
 
             // Ядро Xray поднимаем ПЕРВЫМ.
