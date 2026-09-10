@@ -81,6 +81,7 @@ final class VPNController: NSObject, ObservableObject {
             isAttempting = false
             errorMessage = nil
             dumpDiary()
+            refreshSubscriptionsThroughTunnel()
 
         case .disconnected:
             // Туннель отвалился, так и не подключившись. Своей ошибки система
@@ -93,6 +94,29 @@ final class VPNController: NSObject, ObservableObject {
 
         default:
             break
+        }
+    }
+
+    /// Обновляет подписки сразу после подключения.
+    ///
+    /// Адрес подписки провайдеры держат на своём же домене, и этот домен
+    /// блокируют первым — раньше самих серверов. У нас это выглядело так:
+    ///
+    ///     https://sub.kerimlicorp.com/... -1005 «network connection was lost»
+    ///
+    /// Соединение рвалось на середине рукопожатия, хотя подписка живая. Пока
+    /// туннель поднят, запрос идёт через него и доходит.
+    ///
+    /// Поэтому обновляемся именно здесь, а не по расписанию: это единственный
+    /// момент, когда мы точно можем достучаться до панели. Человеку ничего
+    /// делать не нужно — подключился, и список серверов обновился сам.
+    private func refreshSubscriptionsThroughTunnel() {
+        Task {
+            // Даём маршрутам устояться: сразу после «подключено» они ещё
+            // перестраиваются, и запрос ушёл бы в пустоту.
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard status == .connected else { return }
+            await ServerStore.shared.refreshAll()
         }
     }
 

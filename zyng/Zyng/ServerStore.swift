@@ -417,14 +417,28 @@ final class ServerStore: ObservableObject {
     /// Системный текст вроде «The request timed out» ничего не подсказывает.
     /// Здесь как раз тот случай, когда причина почти всегда одна и та же.
     private static func networkError(_ underlying: Error) -> Error {
-        NSError(
-            domain: Self.networkDomain, code: (underlying as NSError).code,
-            userInfo: [NSLocalizedDescriptionKey:
-                        tr("адрес подписки недоступен из этой сети — "
-                         + "включи VPN на рабочем сервере и добавь её ещё раз",
-                           "the subscription address is unreachable from this "
-                         + "network — connect to a working server and try again")]
-        )
+        let code = (underlying as NSError).code
+
+        // Обрыв на середине — это не «нет сети».
+        //
+        // -1005 при живом интернете означает, что соединение с этим адресом
+        // рвут: провайдер или оператор режет домен подписки. Такое лечится
+        // ровно одним способом — идти к панели через туннель, и человеку
+        // полезнее прочитать это, чем гадать, что у него со связью.
+        let text: String = code == NSURLErrorNetworkConnectionLost
+            ? tr("соединение с адресом подписки обрывают — похоже, его блокируют "
+               + "в этой сети. Подключись к любому рабочему серверу: пока туннель "
+               + "поднят, подписка обновится сама.",
+                 "the connection to the subscription address keeps being cut — it "
+               + "looks blocked on this network. Connect to any working server: "
+               + "while the tunnel is up, the subscription refreshes itself.")
+            : tr("адрес подписки недоступен из этой сети — "
+               + "включи VPN на рабочем сервере и добавь её ещё раз",
+                 "the subscription address is unreachable from this "
+               + "network — connect to a working server and try again")
+
+        return NSError(domain: Self.networkDomain, code: code,
+                       userInfo: [NSLocalizedDescriptionKey: text])
     }
 
     /// Сколько всего ждём подписку, сколько бы вариантов ни осталось.
