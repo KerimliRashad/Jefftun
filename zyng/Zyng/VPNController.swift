@@ -80,6 +80,7 @@ final class VPNController: NSObject, ObservableObject {
             reachedConnected = true
             isAttempting = false
             errorMessage = nil
+            dumpDiary()
 
         case .disconnected:
             // Туннель отвалился, так и не подключившись. Своей ошибки система
@@ -92,6 +93,24 @@ final class VPNController: NSObject, ObservableObject {
 
         default:
             break
+        }
+    }
+
+    /// Печатает дневник расширения в консоль приложения.
+    ///
+    /// Расширение — отдельный процесс, и в консоль Xcode оно не пишет вовсе;
+    /// его дневник лежит в общей папке и открывается вручную. На разборе
+    /// неисправностей это стоило нам нескольких дней: присылали консоль
+    /// приложения, а всё важное происходило там, куда никто не смотрел.
+    ///
+    /// Печатаем при КАЖДОМ подключении, а не только при неудаче: главные
+    /// строки — какой ключ взят, какой адрес и протокол — нужны сразу, до
+    /// того как что-то пойдёт не так.
+    private func dumpDiary() {
+        Task {
+            // Ядро пишет с небольшой задержкой — даём ему договорить.
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            NSLog("🟠 Zyng: ---- ход запуска туннеля ----\n%@", TunnelDiagnostics.trace())
         }
     }
 
@@ -216,10 +235,7 @@ final class VPNController: NSObject, ObservableObject {
         // устаревшими, и все следующие попытки падают с «configuration is
         // stale», а туннель поднимается по СТАРОЙ настройке, то есть со старым
         // ключом. Именно это и выглядело как «поменял сервер, а он прежний».
-        guard !isAttempting else {
-            NSLog("🟡 Zyng: подключение уже идёт, повтор пропущен")
-            return
-        }
+        guard !isAttempting else { return }
 
         errorMessage = nil
         isAttempting = true
