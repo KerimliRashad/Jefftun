@@ -34,6 +34,23 @@ settings:
     # в Shared/L10n.swift.
     LOCALIZED_STRING_SYMBOL_GENERATION: YES
 
+    # Обычный бинарник вместо связки «заглушка + отладочная библиотека».
+    #
+    # Xcode 16 по умолчанию собирает приложение в две части: крошечный
+    # исполняемый файл-загрузчик и Zyng.debug.dylib со всем настоящим кодом.
+    # Сделано это ради предпросмотра SwiftUI. Узнать такую сборку легко —
+    # у главного бинарника подпись в 500 байт вместо десятков килобайт.
+    #
+    # С нашим набором расширений эта схема ломается: dyld убивает процесс
+    # SIGKILL прямо на загрузке подставленной библиотеки, ещё до первой нашей
+    # инструкции. В стеке при этом только loadInsertedLibraries и
+    # createMinimalInfo, память 0 КБ — понять по такому следу нечего, и
+    # выглядит это как «приложение вообще не открывается».
+    #
+    # Предпросмотром мы не пользуемся, поэтому просто собираем как раньше:
+    # один обычный бинарник, который дальше грузится сам собой.
+    ENABLE_DEBUG_DYLIB: NO
+
 # Схемы задаём явно. Без этого XcodeGen их не пишет вовсе, а Xcode создаёт
 # сам и не всегда все: в списке оставались только расширения, схемы приложения
 # не было — и пункт Product → Archive оказывался недоступен.
@@ -87,7 +104,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: online.zyng.Zyng
         PRODUCT_NAME: Zyng
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "39"
+        CURRENT_PROJECT_VERSION: "40"
         CODE_SIGN_ENTITLEMENTS: Zyng/Zyng.entitlements
         INFOPLIST_FILE: Zyng/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -125,7 +142,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: online.zyng.Zyng.ZyngTunnel
         PRODUCT_NAME: ZyngTunnel
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "39"
+        CURRENT_PROJECT_VERSION: "40"
         CODE_SIGN_ENTITLEMENTS: ZyngTunnel/ZyngTunnel.entitlements
         INFOPLIST_FILE: ZyngTunnel/Info.plist
         GENERATE_INFOPLIST_FILE: NO
@@ -156,7 +173,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: online.zyng.Zyng.ZyngWidgets
         PRODUCT_NAME: ZyngWidgets
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "39"
+        CURRENT_PROJECT_VERSION: "40"
         CODE_SIGN_ENTITLEMENTS: ZyngWidgets/ZyngWidgets.entitlements
         INFOPLIST_FILE: ZyngWidgets/Info.plist
         GENERATE_INFOPLIST_FILE: NO
