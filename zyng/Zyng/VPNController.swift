@@ -182,7 +182,6 @@ final class VPNController: NSObject, ObservableObject {
             // и читать их из приложения напрямую не может.
             proto.providerConfiguration = [
                 "key": trimmed,
-                "dns": AppSettings.shared.dns.address,
                 "verbose": AppSettings.shared.verboseLog ? "1" : "0"
             ]
 

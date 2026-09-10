@@ -172,7 +172,43 @@ enum XrayBridge {
         // всюду, кроме этой самой проверки на присутствие.
         server = Self.strippingNulls(server)
 
+        // Просим Xray разрешать адрес своего сервера ЧЕРЕЗ ВСТРОЕННЫЙ резолвер,
+        // а не через системный. Только тогда он заглянет в dns.hosts ниже, куда
+        // мы кладём уже готовый адрес. Без этой строки он идёт в систему —
+        // то есть в туннель, которого без него ещё нет.
+        var stream = server["streamSettings"] as? [String: Any] ?? [:]
+        var sockopt = stream["sockopt"] as? [String: Any] ?? [:]
+        sockopt["domainStrategy"] = "UseIP"
+        stream["sockopt"] = sockopt
+        server["streamSettings"] = stream
+
+        // Готовый адрес сервера вместо имени.
+        //
+        // Xray разрешает имя своего сервера сам, через системный резолвер. А
+        // системный резолвер после подъёма туннеля направлен внутрь туннеля —
+        // то есть запрос идёт к sing-box, тот отдаёт его в SOCKS, а SOCKS
+        // слушает тот самый Xray, который всё ещё ждёт ответа. Заклинивает
+        // намертво, и снаружи это выглядит как «подключено, но ничего не
+        // грузится» — без единой ошибки в журнале.
+        //
+        // Xray поднимается ПЕРВЫМ, до туннеля, поэтому здесь имя ещё
+        // разрешается обычной сетью. Кладём результат в dns.hosts — дальше
+        // Xray берёт адрес оттуда и наружу за ним не ходит. Так же поступают
+        // OneXray и Happ.
+        var dns: [String: Any] = ["servers": ["1.1.1.1", "8.8.8.8", "localhost"]]
+        if let endpoint = try? SingBoxConfig.serverEndpoint(from: link) {
+            let resolved = SingBoxConfig.resolve(endpoint.host)
+            let addresses = resolved.v4 + resolved.v6
+            // Для числового адреса запись бессмысленна, но и безвредна:
+            // getaddrinfo вернёт его же.
+            if !addresses.isEmpty {
+                dns["hosts"] = [endpoint.host: addresses]
+            }
+        }
+
         let config: [String: Any] = [
+            "dns": dns,
+
             // Как и у sing-box, уровень warning: на info ядро пишет каждое
             // соединение вместе с адресом назначения, то есть историю
             // посещений, и она осела бы в файле журнала.

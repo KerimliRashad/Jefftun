@@ -36,10 +36,16 @@ enum SingBoxConfig {
 
     /// Полный конфиг sing-box для одного сервера.
     ///
-    /// `dns` — адрес резолвера из настроек приложения. Через него пойдут
-    /// запросы внутри туннеля.
+    /// Выбора DNS больше нет — и не должно быть.
+    ///
+    /// В настройках стоял список из четырёх резолверов с подписями вроде
+    /// «блокируется у части провайдеров». Подписи были про домашнего
+    /// провайдера, а запрос внутри туннеля уходит НЕ от телефона, а от
+    /// VPN-сервера — блокировки провайдера к нему отношения не имеют. То есть
+    /// пользователь выбирал по неверному признаку, а неудачный выбор ронял
+    /// резолвинг целиком: туннель поднят, ошибок нет, сайты не открываются.
+    /// В OneXray и Happ такой настройки на виду нет по той же причине.
     static func makeConfig(from key: String,
-                           dns: String = "1.1.1.1",
                            verbose: Bool = false) throws -> String {
         // Транспорт, которого нет в этом ядре, исполняет Xray. Тогда sing-box
         // остаётся туннелем, а весь трафик отдаёт в локальный SOCKS, который
@@ -102,9 +108,13 @@ enum SingBoxConfig {
                         //
                         // DoH идёт по 443. Этот порт открыт везде, иначе сервер
                         // и сам бы не работал. Заодно запрос шифрован целиком.
+                        // Адрес зашит: 1.1.1.1 по HTTPS. Запрос идёт с
+                        // VPN-сервера, поэтому «у меня Cloudflare блокируют»
+                        // здесь не работает — блокировки домашнего провайдера
+                        // до этого запроса не дотягиваются.
                         "type": "https",
                         "tag": "dns-remote",
-                        "server": dns,
+                        "server": "1.1.1.1",
                         "path": "/dns-query",
                         "detour": "proxy"
                     ],
@@ -187,6 +197,43 @@ enum SingBoxConfig {
         }
 
         throw ParseError.malformed("нет адреса сервера")
+    }
+
+    /// Числовые адреса имени: (IPv4, IPv6).
+    ///
+    /// Спрашивать это можно только ДО того, как поднят туннель: после
+    /// системный резолвер направлен внутрь туннеля, а туннеля без сервера нет.
+    /// Числовой адрес возвращается как есть, без обращения к DNS.
+    static func resolve(_ host: String) -> (v4: [String], v6: [String]) {
+        var v4: [String] = []
+        var v6: [String] = []
+
+        var hints = addrinfo(ai_flags: 0, ai_family: AF_UNSPEC, ai_socktype: SOCK_STREAM,
+                             ai_protocol: 0, ai_addrlen: 0, ai_canonname: nil,
+                             ai_addr: nil, ai_next: nil)
+        var head: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(host, nil, &hints, &head) == 0, let first = head else {
+            return ([], [])
+        }
+        defer { freeaddrinfo(head) }
+
+        for ptr in sequence(first: first, next: { $0.pointee.ai_next }) {
+            guard let addr = ptr.pointee.ai_addr else { continue }
+            var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            guard getnameinfo(addr, ptr.pointee.ai_addrlen, &buffer, socklen_t(buffer.count),
+                              nil, 0, NI_NUMERICHOST) == 0 else { continue }
+            // Зону вида fe80::1%en0 ни маршрут, ни конфиг ядра не принимают.
+            let text = String(cString: buffer).components(separatedBy: "%").first ?? ""
+            guard !text.isEmpty else { continue }
+
+            if ptr.pointee.ai_family == AF_INET {
+                if !v4.contains(text) { v4.append(text) }
+            } else if ptr.pointee.ai_family == AF_INET6 {
+                if !v6.contains(text) { v6.append(text) }
+            }
+        }
+
+        return (v4, v6)
     }
 
     static func makeOutbound(from key: String) throws -> [String: Any] {

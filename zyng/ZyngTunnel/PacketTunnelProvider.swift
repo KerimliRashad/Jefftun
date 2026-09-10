@@ -43,9 +43,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
             let verbose = readFlag("verbose")
             if verbose { NSLog("🟣 Zyng: подробный журнал ядра включён") }
-            let config = try SingBoxConfig.makeConfig(from: key,
-                                                     dns: readDNS(),
-                                                     verbose: verbose)
+            let config = try SingBoxConfig.makeConfig(from: key, verbose: verbose)
             TunnelDiagnostics.note("конфиг собран, протокол \(key.prefix(while: { $0 != ":" }))")
 
             // Ядро Xray поднимаем ПЕРВЫМ.
@@ -142,33 +140,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return ([], [])
         }
 
-        var v4: [String] = []
-        var v6: [String] = []
-
-        var hints = addrinfo(ai_flags: 0, ai_family: AF_UNSPEC, ai_socktype: SOCK_STREAM,
-                             ai_protocol: 0, ai_addrlen: 0, ai_canonname: nil,
-                             ai_addr: nil, ai_next: nil)
-        var head: UnsafeMutablePointer<addrinfo>?
-
-        // Числовой адрес getaddrinfo вернёт как есть, без обращения к DNS.
-        if getaddrinfo(endpoint.host, nil, &hints, &head) == 0, let first = head {
-            defer { freeaddrinfo(head) }
-
-            for ptr in sequence(first: first, next: { $0.pointee.ai_next }) {
-                guard let addr = ptr.pointee.ai_addr else { continue }
-                var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                guard getnameinfo(addr, ptr.pointee.ai_addrlen, &host, socklen_t(host.count),
-                                  nil, 0, NI_NUMERICHOST) == 0 else { continue }
-                let text = String(cString: host)
-                if ptr.pointee.ai_family == AF_INET {
-                    if !v4.contains(text) { v4.append(text) }
-                } else if ptr.pointee.ai_family == AF_INET6 {
-                    // Зону вида fe80::1%en0 маршрут не принимает.
-                    let clean = text.components(separatedBy: "%").first ?? text
-                    if !v6.contains(clean) { v6.append(clean) }
-                }
-            }
-        }
+        let (v4, v6) = SingBoxConfig.resolve(endpoint.host)
 
         if v4.isEmpty && v6.isEmpty {
             TunnelDiagnostics.note("имя \(endpoint.host) не разрешилось — маршрут не исключаю")
@@ -194,16 +166,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private func readFlag(_ name: String) -> Bool {
         guard let proto = protocolConfiguration as? NETunnelProviderProtocol else { return false }
         return (proto.providerConfiguration?[name] as? String) == "1"
-    }
-
-    /// DNS-сервер, выбранный в настройках. Приезжает вместе с ключом.
-    private func readDNS() -> String {
-        guard let proto = protocolConfiguration as? NETunnelProviderProtocol,
-              let dns = proto.providerConfiguration?["dns"] as? String,
-              !dns.isEmpty else {
-            return "1.1.1.1"
-        }
-        return dns
     }
 
     /// Ядру нужны рабочие папки. Держим их в App Group, чтобы приложение могло

@@ -10,17 +10,9 @@ import UIKit
 struct SettingsView: View {
 
     @ObservedObject var settings: AppSettings
-    @ObservedObject private var vpn = VPNController.shared
 
     let onClose: () -> Void
 
-    /// DNS нельзя менять на лету: конфигурация уходит в ядро при запуске
-    /// туннеля, поэтому изменение вступит в силу после переподключения.
-    private var needsReconnect: Bool {
-        vpn.status == .connected && dnsChanged
-    }
-
-    @State private var dnsChanged = false
     @State private var showCoreLog = false
     @State private var coreLog = ""
 
@@ -34,7 +26,6 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(spacing: 22) {
                         appearanceSection
-                        dnsSection
                         behaviourSection
                         aboutSection
                     }
@@ -208,82 +199,6 @@ struct SettingsView: View {
                 RoundedRectangle(cornerRadius: 14)
                     .fill(JT.bg2)
                     .overlay(RoundedRectangle(cornerRadius: 14).stroke(JT.stroke, lineWidth: 1))
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - DNS
-
-    private var dnsSection: some View {
-        section(title: tr("DNS-сервер", "DNS server"),
-                hint: tr("Через него идут запросы внутри туннеля",
-                         "Queries inside the tunnel go through it")) {
-            VStack(spacing: 8) {
-                ForEach(AppSettings.DNSProvider.allCases) { provider in
-                    dnsRow(provider)
-                }
-
-                if needsReconnect {
-                    HStack(spacing: 8) {
-                        Image(systemName: "info.circle.fill")
-                        Text(tr("Переподключись, чтобы применить",
-                                "Reconnect to apply"))
-                    }
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(JT.accent)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 4)
-                }
-            }
-        }
-    }
-
-    private func dnsRow(_ provider: AppSettings.DNSProvider) -> some View {
-        let active = settings.dns == provider
-
-        return Button {
-            if settings.haptics { jtHaptic() }
-            if settings.dns != provider {
-                settings.dns = provider
-                dnsChanged = true
-            }
-        } label: {
-            HStack(spacing: 13) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(active ? JT.accent : JT.cardHi)
-                        .frame(width: 34, height: 34)
-                    Image(systemName: provider.icon)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(active ? .white : JT.sub)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(provider.title)
-                        .foregroundColor(JT.text)
-                        .font(.system(size: 15, weight: .semibold))
-                    Text(provider.subtitle)
-                        .foregroundColor(JT.sub)
-                        .font(.system(size: 11))
-                }
-
-                Spacer()
-
-                if active {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(JT.green)
-                        .font(.system(size: 19))
-                }
-            }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(active ? JT.cardHi : JT.bg2)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(active ? JT.green.opacity(0.35) : JT.stroke, lineWidth: 1)
-                    )
             )
         }
         .buttonStyle(.plain)
