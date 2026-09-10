@@ -83,6 +83,23 @@ schemes:
       # загрузить и убивает процесс ещё до нашего кода — SIGKILL со стеком
       # loadInsertedLibraries. Приложению они не нужны, поэтому выключаем.
       disableMainThreadChecker: true
+
+      # Запускаем БЕЗ отладчика.
+      #
+      # Это и есть галочка «Debug executable» в схеме. С ней Xcode впрыскивает
+      # в приложение свои отладочные библиотеки, а на iOS 26.4 они не грузятся:
+      # процесс убивают сигналом SIGKILL прямо в dyld, до первой нашей
+      # инструкции. В стеке при этом видны loadInsertedLibraries и
+      # forEachInsertedDylib, память 0 КБ.
+      #
+      # Снять галочку руками мало: схему создаёт xcodegen из этого файла, и
+      # после каждой пересборки проекта настройка возвращалась. Отсюда и
+      # бесконечный круг «заработало — пересобрал — снова SIGKILL».
+      #
+      # Точки останова и пошаговая отладка при этом недоступны, но вывод NSLog
+      # в консоль идёт по-прежнему — а он у нас и есть основной инструмент.
+      # Когда Xcode догонит iOS на телефоне, эту строку можно будет убрать.
+      debugEnabled: false
     profile:
       config: Release
     analyze:
@@ -119,7 +136,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: online.zyng.Zyng
         PRODUCT_NAME: Zyng
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "49"
+        CURRENT_PROJECT_VERSION: "50"
         CODE_SIGN_ENTITLEMENTS: Zyng/Zyng.entitlements
         INFOPLIST_FILE: Zyng/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -157,7 +174,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: online.zyng.Zyng.ZyngTunnel
         PRODUCT_NAME: ZyngTunnel
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "49"
+        CURRENT_PROJECT_VERSION: "50"
         CODE_SIGN_ENTITLEMENTS: ZyngTunnel/ZyngTunnel.entitlements
         INFOPLIST_FILE: ZyngTunnel/Info.plist
         GENERATE_INFOPLIST_FILE: NO
@@ -200,7 +217,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: online.zyng.Zyng.ZyngWidgets
         PRODUCT_NAME: ZyngWidgets
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "49"
+        CURRENT_PROJECT_VERSION: "50"
         CODE_SIGN_ENTITLEMENTS: ZyngWidgets/ZyngWidgets.entitlements
         INFOPLIST_FILE: ZyngWidgets/Info.plist
         GENERATE_INFOPLIST_FILE: NO
