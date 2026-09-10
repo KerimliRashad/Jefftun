@@ -106,7 +106,7 @@ final class ServerStore: ObservableObject {
     /// до тех пор, пока ключ есть в списке.
     private var parsed: [String: Server] = [:]
 
-    private func server(for raw: String) -> Server? {
+    func server(for raw: String) -> Server? {
         if let cached = parsed[raw] { return cached }
         guard let server = parseServer(raw) else { return nil }
         parsed[raw] = server
@@ -267,6 +267,22 @@ final class ServerStore: ObservableObject {
 
         await withTaskGroup(of: Void.self) { group in
             for id in stale {
+                group.addTask { await self.refresh(id) }
+            }
+        }
+    }
+
+    /// Обновляет все подписки, не глядя на срок.
+    ///
+    /// refreshStale обходит только просроченные — это правильно для фонового
+    /// обновления. Но когда сервер молчит, а срок ещё не вышел, ждать его
+    /// бессмысленно: список у нас на руках уже неверный.
+    func refreshAll() async {
+        let ids = subscriptions.map(\.id)
+        guard !ids.isEmpty else { return }
+
+        await withTaskGroup(of: Void.self) { group in
+            for id in ids {
                 group.addTask { await self.refresh(id) }
             }
         }

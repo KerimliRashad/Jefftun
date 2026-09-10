@@ -232,6 +232,12 @@ struct ContentView: View {
 
     @Environment(\.scenePhase) private var scenePhase
 
+    /// Идёт ли сейчас поиск рабочего сервера.
+    @State private var rescuing = false
+
+    /// Что сказать, если поиск рабочего сервера ничего не нашёл.
+    @State private var rescueNote = ""
+
     enum ConnState { case off, connecting, on }
 
     var selected: Server? { store.selected }
@@ -718,6 +724,40 @@ struct ContentView: View {
         }
     }
 
+    /// Обновляет подписки и переключается на первый ответивший сервер.
+    ///
+    /// Порядок здесь не случайный. Сначала подписка: запись о сервере могла
+    /// просто устареть — адрес сменился, точка выключена, — и тогда опрашивать
+    /// старый список бессмысленно. И только потом опрос: он идёт напрямую,
+    /// поэтому туннель на время гасим, иначе проверка пойдёт через тот самый
+    /// сервер, который и не отвечает.
+    private func rescue() async {
+        guard !rescuing else { return }
+        rescuing = true
+        defer { rescuing = false }
+
+        if settings.haptics { jtHaptic() }
+
+        vpn.disconnect()
+        try? await Task.sleep(nanoseconds: 700_000_000)
+        await store.refreshAll()
+
+        let keys = store.allServers.filter(\.isSupported).map(\.raw)
+        guard let alive = await LatencyProbe.firstReachable(among: keys) else {
+            rescueNote = tr("Ни один сервер из списка не отвечает. "
+                          + "Похоже, дело в подписке или в сети, а не в приложении.",
+                            "No server in the list responds. "
+                          + "This looks like the subscription or the network, not the app.")
+            return
+        }
+        rescueNote = ""
+
+        if let server = store.server(for: alive) {
+            store.select(server)
+            await vpn.connect(key: alive)
+        }
+    }
+
     /// Разбор причины, когда туннель поднят, а трафика нет.
     ///
     /// Это самая обидная из всех неисправностей: система показывает
@@ -726,17 +766,53 @@ struct ContentView: View {
     /// лежал в журнале ядра, куда человек не смотрит и не должен.
     @ViewBuilder
     private var troubleCard: some View {
-        if state == .on, ping.failed, !ping.failureReason.isEmpty {
+        let reason = rescueNote.isEmpty
+            ? ((state == .on && ping.failed) ? ping.failureReason : "")
+            : rescueNote
+
+        if !reason.isEmpty {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 15))
                     .foregroundColor(JT.red)
 
-                Text(ping.failureReason)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundColor(JT.text)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(reason)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundColor(JT.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    // Кнопка вместо совета «попробуй другой сервер».
+                    //
+                    // Совет верный, но выполнять его вручную — значит открыть
+                    // список, перебрать десяток строк и на каждой ждать. Здесь
+                    // то же самое делается само: список обновляется из подписки
+                    // (запись могла просто устареть), затем сервера
+                    // опрашиваются, и первый ответивший становится текущим.
+                    Button {
+                        Task { await rescue() }
+                    } label: {
+                        HStack(spacing: 7) {
+                            if rescuing {
+                                ProgressView().scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 12, weight: .bold))
+                            }
+                            Text(rescuing
+                                 ? tr("Ищу рабочий сервер…", "Looking for a working server…")
+                                 : tr("Обновить и найти рабочий", "Refresh and find a working one"))
+                                .font(.system(size: 12.5, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Capsule().fill(JT.accent))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(rescuing)
+                }
             }
             .padding(13)
             .background(
@@ -748,7 +824,7 @@ struct ContentView: View {
                     )
             )
             .transition(.opacity.combined(with: .move(edge: .top)))
-            .animation(.easeOut(duration: 0.25), value: ping.failureReason)
+            .animation(.easeOut(duration: 0.25), value: reason)
         }
     }
 
