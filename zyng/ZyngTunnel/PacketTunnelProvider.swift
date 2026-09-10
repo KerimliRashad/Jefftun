@@ -39,7 +39,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             // Схему логируем, содержимое ключа — нет: там пароли и UUID.
             NSLog("🔵 Zyng: протокол \(key.prefix(while: { $0 != ":" }))")
 
-            let config = try SingBoxConfig.makeConfig(from: key, dns: readDNS())
+            let verbose = readFlag("verbose")
+            if verbose { NSLog("🟣 Zyng: подробный журнал ядра включён") }
+            let config = try SingBoxConfig.makeConfig(from: key,
+                                                     dns: readDNS(),
+                                                     verbose: verbose)
 
             // Ядро Xray поднимаем ПЕРВЫМ.
             //
@@ -124,6 +128,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                           userInfo: [NSLocalizedDescriptionKey: "В конфигурации нет ключа сервера"])
         }
         return key
+    }
+
+    /// Флаг из настроек приложения. Приезжает вместе с ключом.
+    private func readFlag(_ name: String) -> Bool {
+        guard let proto = protocolConfiguration as? NETunnelProviderProtocol else { return false }
+        return (proto.providerConfiguration?[name] as? String) == "1"
     }
 
     /// DNS-сервер, выбранный в настройках. Приезжает вместе с ключом.

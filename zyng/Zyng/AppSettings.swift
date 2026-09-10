@@ -18,6 +18,7 @@ final class AppSettings: ObservableObject {
         static let autoConnect = "settings_autoconnect"
         static let haptics = "settings_haptics"
         static let liveActivity = "settings_live_activity"
+        static let verboseLog = "settings_verbose_log"
         static let theme = "settings_theme"
         static let language = "settings_language"
     }
@@ -108,6 +109,17 @@ final class AppSettings: ObservableObject {
     }
 
     /// Плашка соединения на экране блокировки и в Dynamic Island.
+    /// Подробный журнал ядра.
+    ///
+    /// По умолчанию выключен, и это принципиально: на подробном уровне ядро
+    /// пишет каждое соединение вместе с адресом назначения — то есть историю
+    /// посещений. Держать её на диске постоянно нельзя. Но когда туннель
+    /// поднялся, а страницы не открываются, ядро молчит именно потому, что
+    /// с его точки зрения всё хорошо, и без подробностей причину не увидеть.
+    @Published var verboseLog: Bool {
+        didSet { defaults.set(verboseLog, forKey: Key.verboseLog) }
+    }
+
     @Published var liveActivity: Bool {
         didSet { defaults.set(liveActivity, forKey: Key.liveActivity) }
     }
@@ -123,6 +135,7 @@ final class AppSettings: ObservableObject {
         autoConnect = defaults.bool(forKey: Key.autoConnect)
         haptics = defaults.object(forKey: Key.haptics) as? Bool ?? true
         liveActivity = defaults.object(forKey: Key.liveActivity) as? Bool ?? true
+        verboseLog = defaults.object(forKey: Key.verboseLog) as? Bool ?? false
 
         let storedTheme = defaults.string(forKey: Key.theme) ?? AppTheme.dark.rawValue
         theme = AppTheme(rawValue: storedTheme) ?? .dark

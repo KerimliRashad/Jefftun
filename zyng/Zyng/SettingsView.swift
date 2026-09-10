@@ -316,6 +316,22 @@ struct SettingsView: View {
                     subtitle: tr("Отклик при нажатии кнопок", "Feedback when you tap buttons"),
                     isOn: $settings.haptics
                 )
+
+                // Подробный журнал.
+                //
+                // Выключен по умолчанию намеренно: на подробном уровне ядро
+                // записывает каждое соединение вместе с адресом назначения, то
+                // есть историю посещений. Про это сказано прямо в подписи —
+                // человек должен понимать, что включает.
+                toggleRow(
+                    icon: "doc.text.magnifyingglass",
+                    title: tr("Подробный журнал ядра", "Verbose core log"),
+                    subtitle: tr("Включай только для разбора неполадок: записывает "
+                               + "адреса, куда идут соединения. Переподключись после включения",
+                                 "Turn on only for troubleshooting: it records the "
+                               + "addresses connections go to. Reconnect after enabling"),
+                    isOn: $settings.verboseLog
+                )
             }
         }
     }
