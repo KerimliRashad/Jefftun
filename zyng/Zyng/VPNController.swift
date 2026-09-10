@@ -154,10 +154,70 @@ final class VPNController: NSObject, ObservableObject {
 
     // MARK: - Подключение
 
+    /// Свежий объект настройки из системной базы.
+    private static func currentManager() async throws -> NETunnelProviderManager {
+        // Переиспользуем существующую вместо удаления и создания новой: прошлый
+        // вариант вызывал removeFromPreferences() не дожидаясь завершения и тут
+        // же сохранял новый профиль — гонка с системной базой настроек, которая
+        // и выдавала NEVPNErrorConfigurationInvalid.
+        try await NETunnelProviderManager.loadAllFromPreferences().first
+            ?? NETunnelProviderManager()
+    }
+
+    /// Накладывает наши значения на объект настройки.
+    ///
+    /// Отдельно от сохранения намеренно: после перечитывания все поля
+    /// возвращаются к тому, что лежит в системе, и наложить их нужно заново.
+    private static func apply(key: String, to manager: NETunnelProviderManager) {
+        let proto = (manager.protocolConfiguration as? NETunnelProviderProtocol)
+            ?? NETunnelProviderProtocol()
+        proto.providerBundleIdentifier = providerBundleIdentifier
+        proto.serverAddress = "Zyng"
+        // Настройки уезжают вместе с ключом: расширение — отдельный процесс
+        // и читать их из приложения напрямую не может.
+        proto.providerConfiguration = [
+            "key": key,
+            "verbose": AppSettings.shared.verboseLog ? "1" : "0"
+        ]
+
+        manager.protocolConfiguration = proto
+        manager.localizedDescription = "Zyng VPN"
+        manager.isEnabled = true
+
+        // Переподключение поручаем системе, а не приложению: расширение могут
+        // выгрузить, сеть — переключиться с Wi-Fi на сотовую, сервер — оборвать
+        // соединение. Приложение в этот момент обычно закрыто и сделать ничего
+        // не может, а система поднимет туннель сама.
+        manager.isOnDemandEnabled = AppSettings.shared.autoConnect
+        manager.onDemandRules = [alwaysConnectRule()]
+    }
+
+    /// Та самая «configuration is stale». Приходит из двух разных доменов —
+    /// NEVPNErrorDomain с кодом 4 и NEConfigurationErrorDomain с кодом 5.
+    private static func isStale(_ error: Error) -> Bool {
+        let error = error as NSError
+        if error.domain == NEVPNErrorDomain,
+           error.code == NEVPNError.configurationStale.rawValue { return true }
+        return error.domain == "NEConfigurationErrorDomain" && error.code == 5
+    }
+
     func connect(key: String) async {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             errorMessage = tr("Ключ пустой", "The key is empty")
+            return
+        }
+
+        // Одна попытка за раз.
+        //
+        // В журнале было три «запускаю туннель…» подряд: нажали несколько раз,
+        // и каждый вызов сохранял свою копию настройки. Система такого не
+        // прощает — после первого сохранения остальные объекты становятся
+        // устаревшими, и все следующие попытки падают с «configuration is
+        // stale», а туннель поднимается по СТАРОЙ настройке, то есть со старым
+        // ключом. Именно это и выглядело как «поменял сервер, а он прежний».
+        guard !isAttempting else {
+            NSLog("🟡 Zyng: подключение уже идёт, повтор пропущен")
             return
         }
 
@@ -171,32 +231,37 @@ final class VPNController: NSObject, ObservableObject {
             // новой. Прошлый вариант вызывал removeFromPreferences() не дожидаясь
             // завершения и тут же сохранял новый профиль — гонка с системной базой
             // настроек, которая и выдавала NEVPNErrorConfigurationInvalid.
-            let existing = try await NETunnelProviderManager.loadAllFromPreferences()
-            let manager = existing.first ?? NETunnelProviderManager()
+            var manager = try await Self.currentManager()
 
-            let proto = (manager.protocolConfiguration as? NETunnelProviderProtocol)
-                ?? NETunnelProviderProtocol()
-            proto.providerBundleIdentifier = Self.providerBundleIdentifier
-            proto.serverAddress = "Zyng"
-            // Настройки уезжают вместе с ключом: расширение — отдельный процесс
-            // и читать их из приложения напрямую не может.
-            proto.providerConfiguration = [
-                "key": trimmed,
-                "verbose": AppSettings.shared.verboseLog ? "1" : "0"
-            ]
+            // Настройку применяем и сохраняем с повторами.
+            //
+            // «configuration is stale» означает: объект в памяти описывает уже
+            // не то, что лежит в системной базе, — её успел изменить кто-то
+            // другой (прошлый вызов, расширение, сама система). Лечится это
+            // только перечитыванием: берём свежий объект и накладываем свои
+            // изменения заново. Настойчиво, но не бесконечно.
+            var saved = false
+            var lastError: Error?
 
-            manager.protocolConfiguration = proto
-            manager.localizedDescription = "Zyng VPN"
-            manager.isEnabled = true
+            for attempt in 1...3 {
+                Self.apply(key: trimmed, to: manager)
+                do {
+                    try await manager.saveToPreferences()
+                    saved = true
+                    break
+                } catch {
+                    lastError = error
+                    guard Self.isStale(error), attempt < 3 else { break }
+                    NSLog("🟡 Zyng: настройка устарела, перечитываю (попытка \(attempt))")
+                    manager = try await Self.currentManager()
+                }
+            }
 
-            // Переподключение поручаем системе, а не приложению: расширение
-            // могут выгрузить, сеть — переключиться с Wi-Fi на сотовую, сервер
-            // — оборвать соединение. Приложение в этот момент обычно закрыто и
-            // сделать ничего не может, а система поднимет туннель сама.
-            manager.isOnDemandEnabled = AppSettings.shared.autoConnect
-            manager.onDemandRules = [Self.alwaysConnectRule()]
+            guard saved else {
+                throw lastError ?? NSError(domain: NEVPNErrorDomain,
+                                           code: NEVPNError.configurationStale.rawValue)
+            }
 
-            try await manager.saveToPreferences()
             // Сохранение помечает объект в памяти устаревшим: без повторной загрузки
             // startVPNTunnel() бросает NEVPNErrorConfigurationInvalid.
             try await manager.loadFromPreferences()
@@ -210,6 +275,10 @@ final class VPNController: NSObject, ObservableObject {
             syncStatus()
         } catch {
             NSLog("❌ Zyng: подключение не удалось: \(error)")
+            // Обязательно снять: туннель даже не начал подниматься, а без
+            // сброса защита от повторов заблокировала бы все следующие попытки
+            // до перезапуска приложения.
+            isAttempting = false
             errorMessage = Self.describe(error)
             status = manager?.connection.status ?? .invalid
         }
