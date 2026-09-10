@@ -56,8 +56,9 @@ enum TunnelDiagnostics {
         var lines = defaults.stringArray(forKey: "trace") ?? []
         let time = Self.timeFormatter.string(from: Date())
         lines.append("\(time)  \(message)")
-        // Держим последние полсотни: больше не нужно, а расти без конца нельзя.
-        defaults.set(Array(lines.suffix(50)), forKey: "trace")
+        // Держим последние двести строк: сюда же попадает вывод самого ядра,
+        // а он многословен. Расти без конца всё равно нельзя.
+        defaults.set(Array(lines.suffix(200)), forKey: "trace")
     }
 
     /// Очищает дневник. Зовётся в начале каждого запуска.

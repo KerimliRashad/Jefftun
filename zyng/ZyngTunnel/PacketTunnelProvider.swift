@@ -271,8 +271,18 @@ private final class CommandHandler: NSObject, LibboxCommandServerHandlerProtocol
 
     func setSystemProxyEnabled(_ enabled: Bool) throws {}
 
+    /// Сюда ядро отдаёт СВОЙ журнал.
+    ///
+    /// Это и была причина, по которой «журнал ядра» в приложении оставался
+    /// пустым, сколько бы мы ни повышали уровень подробности. sing-box пишет
+    /// не в файл: он зовёт этот обработчик. А тот отправлял всё в NSLog —
+    /// то есть в консоль расширения, которую не видно ни в Xcode, ни где-либо
+    /// ещё, потому что отладчик подключён к приложению, а не к расширению.
+    ///
+    /// Теперь строки идут в общий дневник, и приложение их показывает.
     func writeDebugMessage(_ message: String?) {
         guard let message, !message.isEmpty else { return }
+        TunnelDiagnostics.note("ядро: \(message)")
         NSLog("🟣 Zyng core: \(message)")
     }
 }
