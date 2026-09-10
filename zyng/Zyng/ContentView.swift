@@ -286,6 +286,7 @@ struct ContentView: View {
                         .multilineTextAlignment(.center)
                 }
                 Spacer(minLength: 8)
+                troubleCard.padding(.horizontal, 20).padding(.bottom, 10)
                 locationCard.padding(.horizontal, 20)
                 addButton.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
             }
@@ -696,13 +697,10 @@ struct ContentView: View {
                     Text("\(ms) \(tr("мс", "ms"))")
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 } else if ping.failed {
-                    // С причиной, если она известна: «нет ответа» само по себе
-                    // не подсказывает, что делать дальше.
-                    Text(ping.failureReason.isEmpty
-                         ? tr("нет ответа", "no response")
-                         : ping.failureReason)
+                    // В самой плашке — коротко. Разбор причины не влезает в
+                    // строку и живёт ниже, отдельной карточкой.
+                    Text(tr("нет ответа", "no response"))
                         .font(.system(size: 12, weight: .medium))
-                        .lineLimit(1)
                 } else {
                     Text(tr("измеряю…", "measuring…"))
                         .font(.system(size: 12, weight: .medium))
@@ -717,6 +715,40 @@ struct ContentView: View {
             )
             .transition(.opacity.combined(with: .scale(scale: 0.9)))
             .animation(.easeOut(duration: 0.2), value: ping.latency)
+        }
+    }
+
+    /// Разбор причины, когда туннель поднят, а трафика нет.
+    ///
+    /// Это самая обидная из всех неисправностей: система показывает
+    /// «Подключено», значок VPN горит, а не открывается ничего — и приложение
+    /// молчит, потому что с его точки зрения всё хорошо. Ответ всё это время
+    /// лежал в журнале ядра, куда человек не смотрит и не должен.
+    @ViewBuilder
+    private var troubleCard: some View {
+        if state == .on, ping.failed, !ping.failureReason.isEmpty {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 15))
+                    .foregroundColor(JT.red)
+
+                Text(ping.failureReason)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundColor(JT.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(13)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(JT.red.opacity(0.10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(JT.red.opacity(0.28), lineWidth: 1)
+                    )
+            )
+            .transition(.opacity.combined(with: .move(edge: .top)))
+            .animation(.easeOut(duration: 0.25), value: ping.failureReason)
         }
     }
 

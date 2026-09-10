@@ -190,6 +190,57 @@ enum TunnelDiagnostics {
         return lines.suffix(limit).joined(separator: "\n")
     }
 
+    /// Короткий человеческий диагноз по журналу ядра.
+    ///
+    /// Нужен для случая «подключено, но ничего не грузится». Ошибки при этом
+    /// нет: туннель поднят честно, и приложению сказать нечего. А в журнале
+    /// ядра лежит точный ответ — просто человек туда не смотрит и не обязан.
+    ///
+    /// Возвращает nil, если внятной причины в журнале нет: выдумывать её
+    /// нельзя, лучше промолчать, чем увести не туда.
+    static func diagnosis() -> String? {
+        guard let path = coreLogPath,
+              let text = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+
+        let errors = text
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+            .filter { $0.contains("ERROR") }
+
+        guard let last = errors.last else { return nil }
+
+        // Адрес сервера из строки вида «dial tcp 76.13.79.233:1234: i/o timeout».
+        // Адрес и порт разделены двоеточием, и само сообщение отделено тоже
+        // двоеточием — но с пробелом после него. По нему и режем.
+        func endpoint() -> String {
+            guard let range = last.range(of: "dial tcp ") else { return "" }
+            let rest = String(last[range.upperBound...])
+            return rest.components(separatedBy: ": ").first ?? ""
+        }
+
+        if last.contains("i/o timeout") {
+            let addr = endpoint()
+            return tr("Сервер не отвечает\(addr.isEmpty ? "" : " (\(addr))"). "
+                    + "Ключ устарел, сервер выключен или этот порт закрыт в твоей сети — "
+                    + "попробуй другой сервер или мобильный интернет вместо Wi-Fi.",
+                      "The server is not responding\(addr.isEmpty ? "" : " (\(addr))"). "
+                    + "The key is stale, the server is down, or this port is blocked on your "
+                    + "network — try another server or cellular instead of Wi-Fi.")
+        }
+
+        if last.contains("connection refused") {
+            return tr("Сервер отклонил соединение: порт закрыт или служба на нём не запущена.",
+                      "The server refused the connection: the port is closed or nothing is listening.")
+        }
+
+        if last.contains("authentication") || last.contains("EOF") {
+            return tr("Сервер обрывает соединение — обычно это несовпадение пароля или шифрования в ключе.",
+                      "The server drops the connection — usually a password or cipher mismatch in the key.")
+        }
+
+        return nil
+    }
+
     /// Последняя причина сбоя: сначала наша ошибка, иначе — вывод ядра.
     static func lastFailure() -> String? {
         if let defaults = shared,

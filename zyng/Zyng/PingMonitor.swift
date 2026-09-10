@@ -173,6 +173,14 @@ final class PingMonitor: ObservableObject {
         guard !Task.isCancelled else { return }
         latency = nil
         failed = true
-        failureReason = Self.describe(lastError)
+
+        // Диагноз ядра важнее системного текста ошибки.
+        //
+        // «Сервер не отвечает» со стороны URLSession означает лишь, что не
+        // ответил наш пробный адрес, — и это одинаково выглядит при десятке
+        // разных причин. Ядро же знает точно: дошло ли до сервера, отказал ли
+        // он, не сошёлся ли пароль. Пока туннель поднят, а трафика нет, это
+        // единственный источник правды, и человеку нужно показывать именно его.
+        failureReason = TunnelDiagnostics.diagnosis() ?? Self.describe(lastError)
     }
 }
