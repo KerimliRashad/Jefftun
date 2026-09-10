@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Экран выбора сервера.
 ///
@@ -505,6 +508,25 @@ struct ServerListView: View {
             jtHaptic()
             store.select(server)
             onPicked()
+        }
+        // Долгое нажатие — адрес и сама ссылка.
+        //
+        // Когда сервер молчит, первый вопрос всегда один: куда мы вообще
+        // стучимся. Раньше узнать это можно было только из журнала ядра, да и
+        // то если туннель успел подняться. Здесь адрес виден сразу, а ссылку
+        // можно скопировать и сравнить с другим клиентом.
+        .contextMenu {
+            if let endpoint = try? SingBoxConfig.serverEndpoint(from: server.raw) {
+                Text("\(endpoint.host):\(endpoint.port)")
+            }
+            Button {
+                #if canImport(UIKit)
+                UIPasteboard.general.string = server.raw
+                #endif
+                jtHaptic()
+            } label: {
+                Label(tr("Скопировать ссылку", "Copy link"), systemImage: "doc.on.doc")
+            }
         }
     }
 
