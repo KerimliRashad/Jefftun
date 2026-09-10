@@ -393,12 +393,21 @@ final class ServerStore: ObservableObject {
         if error.domain == Self.networkDomain { return true }
         guard error.domain == NSURLErrorDomain else { return false }
         switch error.code {
+        // Таймаута здесь БОЛЬШЕ НЕТ, и это принципиально.
+        //
+        // Панели Remnawave собирают конфиг под клиента на лету и отвечают
+        // небыстро — секунд по десять-пятнадцать. Мы ждали восемь, считали
+        // таймаут за «сети нет» и после двух таких выдавали «адрес подписки
+        // недоступен из этой сети». Подписка при этом была совершенно живой:
+        // в Happ, который ждёт дольше, она открывалась.
+        //
+        // Медленный ответ и отсутствие сети — разные вещи. Первое лечится
+        // терпением, второе — нет.
         case NSURLErrorNetworkConnectionLost,
              NSURLErrorNotConnectedToInternet,
              NSURLErrorCannotConnectToHost,
              NSURLErrorCannotFindHost,
-             NSURLErrorDNSLookupFailed,
-             NSURLErrorTimedOut:
+             NSURLErrorDNSLookupFailed:
             return true
         default:
             return false
@@ -418,17 +427,26 @@ final class ServerStore: ObservableObject {
         )
     }
 
+    /// Сколько всего ждём подписку, сколько бы вариантов ни осталось.
+    private static let fetchDeadline: TimeInterval = 60
+
     private func fetchProfile(from url: String) async throws -> Profile {
         let variants = Self.urlVariants(of: url)
+        let started = Date()
 
         for (index, variant) in variants.enumerated() {
+            // Общий срок важнее полноты перебора: вариантов адреса больше
+            // десятка, и без него неудача растянулась бы на много минут.
+            if Date().timeIntervalSince(started) > Self.fetchDeadline { break }
+
             // По исходному адресу перебираем все User-Agent, по запасным —
             // только первые три: иначе ожидание растянется на минуты.
             let agents = index == 0 ? Self.userAgents : Array(Self.userAgents.prefix(3))
             // Пустой профиль за успех не считаем: запасной адрес мог ответить
             // и не отдать ни одного ключа.
             do {
-                let profile = try await fetchProfile(from: variant, agents: agents)
+                let profile = try await fetchProfile(from: variant, agents: agents,
+                                                     until: started.addingTimeInterval(Self.fetchDeadline))
                 if !profile.keys.isEmpty { return profile }
             } catch {
                 // Связи нет — остальные варианты адреса тоже не ответят.
@@ -438,10 +456,12 @@ final class ServerStore: ObservableObject {
 
         // Ни один вариант не дал ключей — повторяем исходный запрос, чтобы
         // вернуть настоящую причину, а не молчаливый провал.
-        return try await fetchProfile(from: url, agents: Self.userAgents)
+        return try await fetchProfile(from: url, agents: Self.userAgents,
+                                      until: Date().addingTimeInterval(20))
     }
 
-    private func fetchProfile(from url: String, agents: [String]) async throws -> Profile {
+    private func fetchProfile(from url: String, agents: [String],
+                              until deadline: Date) async throws -> Profile {
         guard let parsed = URL(string: url) else { return Profile() }
 
         var lastError: Error?
@@ -453,11 +473,20 @@ final class ServerStore: ObservableObject {
         var legacy: Profile?
 
         for agent in agents {
+            // Срок общий на всю попытку — иначе семь имён клиентов по двадцать
+            // секунд складываются в две минуты ожидания.
+            if Date() > deadline { break }
+
             var request = URLRequest(url: parsed)
             request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-            // Перебор идёт по пяти User-Agent подряд, поэтому долгий таймаут
-            // умножается на пять. Восьми секунд хватает живой панели с запасом.
-            request.timeoutInterval = 8
+            // Двадцать секунд, а не восемь.
+            //
+            // Восьми «хватало живой панели с запасом» только в моём
+            // представлении. Remnawave собирает конфиг под конкретного клиента
+            // при каждом запросе и на медленной связи отвечает дольше. Чтобы
+            // перебор при этом не растянулся на минуты, ниже стоит общий срок
+            // на всю попытку.
+            request.timeoutInterval = 20
             request.setValue(agent, forHTTPHeaderField: "User-Agent")
             // Без Accept часть панелей и защитных прослоек отбивает запрос,
             // хотя подписка живая. Настольный клиент его слал всегда.
