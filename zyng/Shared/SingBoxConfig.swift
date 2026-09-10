@@ -169,23 +169,24 @@ enum SingBoxConfig {
 
     /// Адрес и порт сервера — для замера задержки, без построения конфига.
     static func serverEndpoint(from key: String) throws -> (host: String, port: Int) {
-        // Ключи с транспортом Xray этим разборщиком не строятся — он их
-        // намеренно отвергает. Адрес и порт в них при этом обычные, и замер
-        // задержки должен работать: без него такой сервер выглядел бы в
-        // списке мёртвым, хотя подключение к нему проходит.
-        if needsXray(key),
-           let components = URLComponents(string: key.trimmingCharacters(in: .whitespacesAndNewlines)),
+        // Сначала полноценный разбор — он умеет все форматы, включая base64
+        // внутри vmess и ss. URLComponents тут только запасной вариант: для
+        // ключей, которые исполняет Xray, наш разборщик конфига может и
+        // отказать, а адрес в них всё равно обычный.
+        if let outbound = try? makeOutbound(from: key),
+           let host = outbound["server"] as? String,
+           let port = outbound["server_port"] as? Int,
+           !host.isEmpty, port > 0 {
+            return (host, port)
+        }
+
+        if let components = URLComponents(string: key.trimmingCharacters(in: .whitespacesAndNewlines)),
            let host = components.host, !host.isEmpty,
            let port = components.port, port > 0 {
             return (host, port)
         }
 
-        let outbound = try makeOutbound(from: key)
-        guard let host = outbound["server"] as? String,
-              let port = outbound["server_port"] as? Int else {
-            throw ParseError.malformed("нет адреса сервера")
-        }
-        return (host, port)
+        throw ParseError.malformed("нет адреса сервера")
     }
 
     static func makeOutbound(from key: String) throws -> [String: Any] {
@@ -566,8 +567,14 @@ enum SingBoxConfig {
     /// Транспорт (ws / grpc / http) из query-параметров.
     /// Транспорты, которые умеет ядро. Всё остальное честнее отвергнуть, чем
     /// подключаться «как получится».
+    /// Транспорты, которые встречаются в ссылках. Все их ведёт Xray.
+    ///
+    /// Список раньше перечислял то, что умеет sing-box, и всё остальное
+    /// приложение честно отвергало. Теперь разговор с сервером ведёт Xray, а он
+    /// знает их все — включая xhttp и kcp, которых в sing-box нет вовсе.
     static let supportedTransports: Set<String> = [
-        "", "tcp", "raw", "none", "ws", "grpc", "http", "h2", "httpupgrade", "quic"
+        "", "tcp", "raw", "none", "ws", "grpc", "http", "h2", "httpupgrade",
+        "quic", "xhttp", "splithttp", "kcp", "mkcp", "domainsocket", "ds"
     ]
 
     /// Транспорты, которые умеет только Xray. Их исполняет второе ядро —
@@ -581,9 +588,35 @@ enum SingBoxConfig {
     }
 
     /// Нужно ли для этого ключа поднимать Xray.
+    /// Протоколы, которые умеет ТОЛЬКО sing-box. Всё остальное ведёт Xray.
+    ///
+    /// В Xray их нет и не планируется: hysteria2 и tuic придуманы вне его
+    /// экосистемы. Для таких ключей sing-box работает как раньше — сам говорит
+    /// с сервером.
+    private static let singBoxOnlySchemes: Set<String> = [
+        "hysteria", "hysteria2", "hy2", "tuic", "wireguard", "wg", "sb"
+    ]
+
+    /// Вести ли этот ключ через Xray.
+    ///
+    /// Раньше сюда попадали только ключи с xhttp, а всё прочее исполнял
+    /// sing-box. Теперь наоборот: Xray ведёт всё, кроме того, чего он не умеет.
+    ///
+    /// Причина простая и проверенная на практике: ключи, которые у нас молчали,
+    /// в клиентах на Xray работают. Xray — родная реализация для vless, vmess,
+    /// trojan и shadowsocks: он знает все их поля, обёртки и особенности,
+    /// включая те, которых в sing-box нет вовсе или которые он понимает иначе.
+    /// Догонять его чужой реализацией — бесконечная работа, а результат человек
+    /// видит как «туннель есть, интернета нет».
+    ///
+    /// Разделение труда остаётся прежним: туннель по-прежнему держит sing-box —
+    /// он забирает пакеты у системы, — а разговор с сервером ведёт Xray через
+    /// локальный SOCKS. Оба живут в одном процессе расширения.
     static func needsXray(_ key: String) -> Bool {
-        guard let transport = try? transportName(of: key) else { return false }
-        return xrayTransports.contains(transport)
+        let raw = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let schemeEnd = raw.range(of: "://") else { return false }
+        let scheme = String(raw[raw.startIndex..<schemeEnd.lowerBound]).lowercased()
+        return !singBoxOnlySchemes.contains(scheme)
     }
 
     /// Имя транспорта прямо из ключа — без построения всего конфига.
