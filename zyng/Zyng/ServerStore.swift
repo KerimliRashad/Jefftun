@@ -669,6 +669,16 @@ final class ServerStore: ObservableObject {
         let direct = lines(of: text)
         if !direct.isEmpty { return direct }
 
+        // Готовый конфиг Xray или sing-box.
+        //
+        // Современным клиентам панель отдаёт именно его, а не список ссылок:
+        // 22 КБ JSON с vless и Reality. Мы искали строки «vless://», не
+        // находили ни одной и откатывались на запасной текстовый список —
+        // шесть давно выключенных ss-серверов. Отсюда и «в Happ работает,
+        // в Zyng нет». Разбор — в ConfigImport.
+        let fromConfig = ConfigImport.keys(fromJSON: text)
+        if !fromConfig.isEmpty { return fromConfig }
+
         if let data = Data(base64Encoded: padBase64(text)) {
             let decoded = String(decoding: data, as: UTF8.self)
             let fromBase64 = lines(of: decoded)
