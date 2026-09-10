@@ -406,7 +406,15 @@ struct SettingsView: View {
                 // пишет что-то внятное про сервер или сертификат. Раньше это
                 // оседало в файле и никем не читалось.
                 Button {
-                    coreLog = TunnelDiagnostics.coreLog()
+                    // Сначала дневник расширения, потом вывод ядра.
+                    //
+                    // Дневник важнее: он показывает, до какого шага дошёл
+                    // запуск туннеля. Расширение — отдельный процесс, его
+                    // сообщения не видны ни в консоли Xcode, ни где-либо ещё.
+                    coreLog = tr("── Ход запуска туннеля ──\n", "── Tunnel startup ──\n")
+                        + TunnelDiagnostics.trace()
+                        + tr("\n\n── Вывод ядра ──\n", "\n\n── Core output ──\n")
+                        + TunnelDiagnostics.coreLog()
                     showCoreLog = true
                 } label: {
                     HStack(spacing: 12) {

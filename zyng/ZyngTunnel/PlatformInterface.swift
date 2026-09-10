@@ -147,6 +147,7 @@ final class PlatformInterface: NSObject, LibboxPlatformInterfaceProtocol {
 
         ret0_?.pointee = fd
 
+        TunnelDiagnostics.note("сетевые настройки применены, дескриптор \(fd)")
         NSLog("✅ Zyng: туннель открыт, настройки применены")
         tunnelOpened.signal()
     }

@@ -40,6 +40,44 @@ enum TunnelDiagnostics {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
     }
 
+    // MARK: - Дневник расширения
+
+    /// Отметки о ходе запуска туннеля.
+    ///
+    /// Расширение — отдельный процесс, и его вывод в консоль Xcode не попадает:
+    /// отладчик подключён к приложению. Весь день мы разбирали неполадку,
+    /// видя только половину картины — сообщения приложения, — а самое
+    /// интересное происходило там, куда мы не смотрели.
+    ///
+    /// Поэтому расширение отмечается здесь, в общей группе, а приложение эти
+    /// отметки показывает. Адресов и ключей тут нет, только шаги.
+    static func note(_ message: String) {
+        guard let defaults = shared else { return }
+        var lines = defaults.stringArray(forKey: "trace") ?? []
+        let time = Self.timeFormatter.string(from: Date())
+        lines.append("\(time)  \(message)")
+        // Держим последние полсотни: больше не нужно, а расти без конца нельзя.
+        defaults.set(Array(lines.suffix(50)), forKey: "trace")
+    }
+
+    /// Очищает дневник. Зовётся в начале каждого запуска.
+    static func clearTrace() {
+        shared?.removeObject(forKey: "trace")
+    }
+
+    static func trace() -> String {
+        let lines = shared?.stringArray(forKey: "trace") ?? []
+        return lines.isEmpty
+            ? tr("Расширение ничего не записало.", "The extension wrote nothing.")
+            : lines.joined(separator: "\n")
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
     // MARK: - Запись (со стороны расширения)
 
     /// Наши собственные ошибки — те, до которых ядро даже не дошло.

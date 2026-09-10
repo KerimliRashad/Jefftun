@@ -32,6 +32,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         // Причину прошлой неудачи убираем сразу: иначе после успешного
         // подключения приложение покажет устаревшую ошибку.
         TunnelDiagnostics.clear()
+        TunnelDiagnostics.clearTrace()
+        TunnelDiagnostics.note("запуск расширения")
 
         do {
             let key = try readKey()
@@ -44,6 +46,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             let config = try SingBoxConfig.makeConfig(from: key,
                                                      dns: readDNS(),
                                                      verbose: verbose)
+            TunnelDiagnostics.note("конфиг собран, протокол \(key.prefix(while: { $0 != ":" }))")
 
             // Ядро Xray поднимаем ПЕРВЫМ.
             //
@@ -59,6 +62,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             }
 
             try setupCore()
+            TunnelDiagnostics.note("рабочие папки и журнал готовы")
 
             // Проверяем конфиг до запуска: иначе ошибка всплыла бы уже внутри
             // ядра, а туннель просто завис бы в состоянии «подключение».
@@ -77,9 +81,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 throw serverError ?? Self.coreError("Не удалось создать сервис ядра")
             }
             self.commandServer = server
+            TunnelDiagnostics.note("сервис ядра создан")
 
             try server.start()
             try server.startOrReloadService(config, options: LibboxOverrideOptions())
+            TunnelDiagnostics.note("ядро запущено, жду открытия туннеля")
 
             NSLog("✅ Zyng: ядро запущено, жду открытия туннеля…")
 
@@ -93,6 +99,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 )
             }
 
+            TunnelDiagnostics.note("туннель открыт — соединение установлено")
             NSLog("✅ Zyng: подключение установлено")
             completionHandler(nil)
 
@@ -107,6 +114,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             NSLog("❌ Zyng: запуск не удался: \(error.localizedDescription)")
             // Приложение прочитает это и покажет на экране: своих логов
             // расширения оно не видит.
+            TunnelDiagnostics.note("ОШИБКА: \(error.localizedDescription)")
             TunnelDiagnostics.record(error.localizedDescription)
             completionHandler(error)
         }
