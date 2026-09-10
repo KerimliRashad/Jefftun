@@ -216,6 +216,18 @@ private func probeEndpoint(_ raw: String) -> (String, UInt16)? {
           !server.host.isEmpty else {
         return nil
     }
+
+    // Адреса «куда угодно» и петля — не адреса сервера.
+    //
+    // В журнале попадались попытки соединиться с 0.0.0.0:1, и система их
+    // честно отвергала: «NECP_CLIENT_ACTION_ADD_FLOW [22: Invalid argument]».
+    // Такой адрес не значит ничего — он появляется, когда разбор ключа не
+    // нашёл настоящего хоста, но и не признался в этом. Замер по нему всегда
+    // проваливается, а в списке это выглядит как мёртвый сервер, хотя виноват
+    // разбор. Лучше честно сказать «мерить нечего».
+    let bad: Set<String> = ["0.0.0.0", "::", "0:0:0:0:0:0:0:0", "127.0.0.1", "localhost"]
+    guard !bad.contains(server.host.lowercased()) else { return nil }
+
     return (server.host, UInt16(server.port))
 }
 
