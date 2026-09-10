@@ -63,6 +63,25 @@ enum TunnelDiagnostics {
 
     // MARK: - Чтение (со стороны приложения)
 
+    /// Весь вывод ядра целиком — для показа человеку.
+    ///
+    /// Причина сбоя (lastFailure) отвечает на вопрос «почему не подключилось».
+    /// Но бывает хуже: туннель поднялся, а трафик не идёт — тогда ошибки нет
+    /// вовсе, и подсказать нечем. Ядро в такие моменты обычно пишет что-то
+    /// внятное про сервер или сертификат, просто это оседает в файле и никем
+    /// не читается. Здесь мы его достаём.
+    static func coreLog(limit: Int = 60) -> String {
+        guard let path = stderrPath,
+              let text = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return tr("Ядро ничего не записало.", "The core wrote nothing.")
+        }
+        let lines = text.split(whereSeparator: \.isNewline).map(String.init)
+        guard !lines.isEmpty else {
+            return tr("Ядро ничего не записало.", "The core wrote nothing.")
+        }
+        return lines.suffix(limit).joined(separator: "\n")
+    }
+
     /// Последняя причина сбоя: сначала наша ошибка, иначе — вывод ядра.
     static func lastFailure() -> String? {
         if let defaults = shared,

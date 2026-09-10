@@ -1,5 +1,11 @@
 import SwiftUI
 
+// UIPasteboard живёт в UIKit. SwiftUI обычно тянет его за собой, но
+// полагаться на это не стоит — импортируем явно.
+#if canImport(UIKit)
+import UIKit
+#endif
+
 @MainActor
 struct SettingsView: View {
 
@@ -15,6 +21,8 @@ struct SettingsView: View {
     }
 
     @State private var dnsChanged = false
+    @State private var showCoreLog = false
+    @State private var coreLog = ""
 
     var body: some View {
         ZStack {
@@ -35,6 +43,61 @@ struct SettingsView: View {
                 }
             }
         }
+        .sheet(isPresented: $showCoreLog) { coreLogSheet }
+    }
+
+    /// Журнал ядра: показать и дать скопировать.
+    ///
+    /// Текст выделяемый и есть кнопка «Скопировать»: этот журнал нужен, чтобы
+    /// его кому-то отправить, а переписывать с экрана телефона руками —
+    /// заведомо мимо.
+    private var coreLogSheet: some View {
+        ZStack {
+            JT.backdrop.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                HStack {
+                    Text(tr("Журнал ядра", "Core log"))
+                        .foregroundColor(JT.text)
+                        .font(.system(size: 20, weight: .bold))
+                    Spacer()
+                    Button {
+                        UIPasteboard.general.string = coreLog
+                        jtHaptic()
+                    } label: {
+                        Text(tr("Скопировать", "Copy"))
+                            .foregroundColor(JT.accent)
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    Button { showCoreLog = false } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(JT.sub)
+                            .font(.system(size: 24))
+                    }
+                    .padding(.leading, 12)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 18)
+
+                ScrollView {
+                    Text(coreLog)
+                        .foregroundColor(JT.text)
+                        .font(.system(size: 11, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(JT.bg2)
+                                .overlay(RoundedRectangle(cornerRadius: 14)
+                                    .stroke(JT.stroke, lineWidth: 1))
+                        )
+                        .padding(.horizontal, 18)
+                        .padding(.bottom, 28)
+                }
+            }
+        }
+        .preferredColorScheme(settings.theme.colorScheme)
     }
 
     // MARK: - Шапка
@@ -319,11 +382,52 @@ struct SettingsView: View {
                     url: "https://zyng.online/privacy.html"
                 )
 
+                // Журнал ядра.
+                //
+                // Нужен ровно в том случае, который иначе не диагностируется:
+                // туннель поднялся, а страницы не открываются. Ошибки при этом
+                // нет — показывать нечего, — но ядро в такие моменты обычно
+                // пишет что-то внятное про сервер или сертификат. Раньше это
+                // оседало в файле и никем не читалось.
+                Button {
+                    coreLog = TunnelDiagnostics.coreLog()
+                    showCoreLog = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .foregroundColor(JT.accent)
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(width: 22)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(tr("Журнал ядра", "Core log"))
+                                .foregroundColor(JT.text)
+                                .font(.system(size: 15, weight: .medium))
+                            Text(tr("Что пишет движок — пригодится, если не грузятся страницы",
+                                    "What the engine says — useful when pages do not load"))
+                                .foregroundColor(JT.sub)
+                                .font(.system(size: 11))
+                                .lineLimit(2)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(JT.sub)
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .padding(14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(JT.bg2)
+                            .overlay(RoundedRectangle(cornerRadius: 14)
+                                .stroke(JT.stroke, lineWidth: 1))
+                    )
+                }
+                .buttonStyle(.plain)
+
                 linkRow(
                     icon: "paperplane.fill",
                     title: tr("Канал в Telegram", "Telegram channel"),
                     subtitle: tr("Новости, ключи и помощь", "News, keys and support"),
-                    url: "https://t.me/jeffvpn"
+                    url: "https://t.me/zyngfast"
                 )
             }
         }
