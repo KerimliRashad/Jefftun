@@ -253,12 +253,23 @@ enum SingBoxConfig {
         // отдаём ровно один, и промах здесь означает «подключено, трафика
         // нет». Поэтому спрашиваем каждый по очереди, коротко.
         let port = (outbound["server_port"] as? Int) ?? 443
-        let address = addresses.first { reachable($0, port: port, timeout: 1.5) }
+        let alive = addresses.first { reachable($0, port: port, timeout: 1.5) }
+        let address = alive
             ?? addresses.first(where: { !$0.contains(":") })
             ?? addresses[0]
 
-        TunnelDiagnostics.note("адрес сервера: \(host) → \(address) "
+        TunnelDiagnostics.note("адрес сервера: \(host) → \(address):\(port) "
                              + "(\(SecureDNS.lastSource(for: host)))")
+
+        // Отдельной строкой, потому что это важнее всего остального в дневнике.
+        //
+        // Если сервер не отвечает ещё ДО поднятия туннеля — дальше можно не
+        // читать: ядро, маршруты и ключ ни при чём, соединения просто нет.
+        if alive == nil {
+            TunnelDiagnostics.note("ВНИМАНИЕ: \(address):\(port) не принимает соединение "
+                                 + "(проверено напрямую, до туннеля). "
+                                 + "Ни ядро, ни ключ на это не влияют.")
+        }
 
         var result = outbound
         result["server"] = address
