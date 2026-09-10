@@ -516,6 +516,12 @@ final class ServerStore: ObservableObject {
             do {
                 let (data, response) = try await URLSession.shared.data(for: request)
 
+                let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                let type = (response as? HTTPURLResponse)?
+                    .value(forHTTPHeaderField: "Content-Type") ?? "—"
+                NSLog("🟣 Zyng подписка: %@ | %@ → %d, %d байт, %@",
+                      parsed.absoluteString, agent, code, data.count, type)
+
                 if let http = response as? HTTPURLResponse,
                    !(200..<300).contains(http.statusCode) {
                     lastError = NSError(
@@ -527,7 +533,14 @@ final class ServerStore: ObservableObject {
                     continue
                 }
 
-                let keys = expand(String(decoding: data, as: UTF8.self))
+                let body = String(decoding: data, as: UTF8.self)
+                let keys = expand(body)
+                let sample: String = keys.isEmpty
+                    ? ", начало ответа: "
+                        + String(body.prefix(160)).replacingOccurrences(of: "\n", with: " ")
+                    : ", первый: " + String((keys.first ?? "").prefix(40))
+                NSLog("🟣 Zyng подписка: ключей найдено %d%@", keys.count, sample)
+
                 if keys.isEmpty {
                     // Ответ есть, ключей в нём нет — обычно это HTML-страница
                     // подписки: панель не узнала клиента и показала её вместо
@@ -549,6 +562,9 @@ final class ServerStore: ObservableObject {
                 if legacy == nil { legacy = profile }
                 continue
             } catch {
+                NSLog("🟣 Zyng подписка: %@ | %@ → ошибка %@",
+                      parsed.absoluteString, agent, (error as NSError).localizedDescription)
+
                 // Сеть недоступна — перебирать дальше бессмысленно.
                 //
                 // Вариантов адреса и User-Agent в сумме больше сорока. Когда
