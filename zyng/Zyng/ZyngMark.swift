@@ -86,8 +86,12 @@ struct ZyngZ: Shape {
         line.addLine(to: point(0.90, 0.88))       // нижняя перекладина
 
         // Толщина в долях высоты: на любом размере буква одинаковой плотности.
+        //
+        // Значение подобрано по иконке, где то же слово набрано настоящим
+        // шрифтом: штрих Z должен читаться одним весом с соседними буквами,
+        // иначе он выглядит либо приклеенным значком, либо тонкой ниточкой.
         return line.strokedPath(
-            StrokeStyle(lineWidth: h * 0.155, lineCap: .round, lineJoin: .round)
+            StrokeStyle(lineWidth: h * 0.175, lineCap: .round, lineJoin: .round)
         )
     }
 }
@@ -130,7 +134,12 @@ struct ZyngWordmark: View {
                 .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
 
             Text("yng")
-                .font(.system(size: fontSize, weight: .black, design: .rounded))
+                // Обычное начертание, не скруглённое.
+                //
+                // Скруглённое смотрелось мягче, но рядом с угловатой Z читалось
+                // как другой шрифт: у неё прямые штрихи и острые сломы. Здесь
+                // важнее единство, а не мягкость по отдельности.
+                .font(.system(size: fontSize, weight: .heavy))
                 // Плотнее обычного: у black начертания просветы между буквами
                 // широкие, и слово распадалось на отдельные знаки.
                 .tracking(-fontSize * 0.02)
