@@ -24,7 +24,9 @@ final class TrafficReporter: NSObject, LibboxCommandClientHandlerProtocol {
 
     func start() {
         let options = LibboxCommandClientOptions()
-        options.command = LibboxCommandStatus
+        // Команды добавляются методом, а не присваиванием: в ядре их список,
+        // и клиент вправе подписаться сразу на несколько. Нам нужна одна.
+        options.addCommand(Int32(LibboxCommandStatus))
         // Раз в секунду: чаще незачем — цифры на экране всё равно меняются
         // не быстрее, а каждое сообщение будит процесс расширения.
         options.statusInterval = Int64(NSEC_PER_SEC)
@@ -83,5 +85,7 @@ final class TrafficReporter: NSObject, LibboxCommandClientHandlerProtocol {
     func writeGroups(_ message: LibboxOutboundGroupIteratorProtocol?) {}
     func initializeClashMode(_ modeList: LibboxStringIteratorProtocol?, currentMode: String?) {}
     func updateClashMode(_ newMode: String?) {}
-    func writeConnectionEvents(_ events: LibboxConnectionEvents?) {}
+    // Имя без «ConnectionEvents» — так его назвал gomobile при переводе
+    // интерфейса Go в Objective-C. Компилятор на это прямо и указывает.
+    func write(_ events: LibboxConnectionEvents?) {}
 }
