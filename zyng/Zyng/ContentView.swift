@@ -239,6 +239,7 @@ struct ContentView: View {
     @ObservedObject private var vpn = VPNController.shared
     @ObservedObject private var settings = AppSettings.shared
     @StateObject private var ping = PingMonitor()
+    @StateObject private var traffic = TrafficMonitor()
     @ObservedObject private var probe = LatencyProbe.shared
 
     @Environment(\.scenePhase) private var scenePhase
@@ -371,15 +372,18 @@ struct ContentView: View {
         switch newStatus {
         case .connected:
             ping.start()
+            traffic.start()
             lastReportedLatency = nil
             startLiveActivity()
             // Сообщение о проверке больше не нужно: соединение состоялось.
             status = ""
         case .connecting, .reasserting:
-            // Анимация кольца сама ускоряется по состоянию — здесь делать нечего.
+            // Кольца крутятся с постоянной скоростью и состояния не замечают —
+            // здесь делать нечего.
             break
         default:
             ping.stop()
+            traffic.stop()
             #if canImport(ActivityKit)
             LiveActivityController.shared.stop()
             #endif
@@ -596,14 +600,13 @@ struct ContentView: View {
                 .scaleEffect(pressed ? 0.94 : 1)
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: pressed)
-            // Медленная мягкая пружина.
+            // Короткая собранная пружина.
             //
-            // Смена состояния — главное событие на экране, и раньше она
-            // проскакивала быстрее, чем взгляд успевал за ней: цвет менялся
-            // почти мгновенно, и переход не читался. Секунда с небольшим
-            // доводчиком превращает его в движение, за которым приятно
-            // наблюдать. Быстрее здесь не лучше.
-            .animation(.spring(response: 1.0, dampingFraction: 0.82), value: state)
+            // Секунда, что стояла здесь раньше, задумывалась как «плавно», а
+            // ощущалась как задержка: палец уже отпущен, а кнопка всё ещё
+            // доводит цвет. Полсекунды с высоким демпфированием — движение
+            // видно, но оно не заставляет себя ждать.
+            .animation(.spring(response: 0.45, dampingFraction: 0.88), value: state)
         }
         .buttonStyle(.plain)
         // Нажатие отслеживаем сами: у кнопки со своим оформлением нет
@@ -613,52 +616,40 @@ struct ContentView: View {
                 .onChanged { _ in pressed = true }
                 .onEnded { _ in pressed = false }
         )
-        .onAppear { startOrbAnimation() }
-        .onChange(of: state) { _, _ in startOrbAnimation() }
+        .onAppear {
+            startRotation()
+            updateBreathing()
+        }
+        .onChange(of: state) { _, _ in updateBreathing() }
     }
 
-    /// Кольца крутятся всегда, но с разной скоростью: быстро при подключении,
-    /// спокойно в остальное время. Свечение и молния дышат только когда
-    /// соединение активно.
-    private func startOrbAnimation() {
-        let outerDuration: Double
-        let innerDuration: Double
+    /// Вращение колец. Запускается ОДИН раз и больше не трогается.
+    ///
+    /// Раньше скорость зависела от состояния, и на каждом переключении
+    /// анимация перезапускалась. А перезапустить бесконечное вращение в SwiftUI
+    /// нельзя иначе как вернув угол в ноль — то есть кольца телепортировались
+    /// в исходное положение. Вместе с секундной пружиной на смене состояния это
+    /// и читалось как «подлагивает»: рывок колец, медленная доводка цвета,
+    /// перезапуск дыхания — всё одновременно.
+    ///
+    /// Теперь скорость постоянная, а состояние меняет только цвет и яркость.
+    /// Вращение не прерывается никогда, поэтому и дёргаться нечему.
+    private func startRotation() {
+        guard outerAngle == 0 else { return }
 
-        // Медленно. Очень медленно — и это намеренно.
-        //
-        // Круг диаметром в четверть экрана при обороте за десяток секунд
-        // выглядит вертушкой: движение перетягивает на себя всё внимание, хотя
-        // сообщать ему нечего. Здесь оборот занимает полторы-две минуты в
-        // покое и полминуты в работе — глаз замечает, что живое, но следить не
-        // тянет. Даже на время подключения оборот идёт шесть секунд: этого с
-        // избытком хватает, чтобы прочитать «идёт работа».
-        switch state {
-        case .connecting: outerDuration = 6;   innerDuration = 8
-        case .on:         outerDuration = 34;  innerDuration = 46
-        case .off:        outerDuration = 90;  innerDuration = 120
-        }
-
-        // Сначала возвращаем углы в ноль БЕЗ анимации.
-        //
-        // Иначе кольца замирали. Первый вызов доводил угол до 360 и там его
-        // оставлял; при следующей смене состояния мы снова просили
-        // «анимируй до 360», то есть из 360 в 360 — движения на ноль
-        // градусов, и вращение прекращалось насовсем. Ровно это и выглядело
-        // как «включил VPN, и всё застыло».
-        var reset = Transaction()
-        reset.disablesAnimations = true
-        withTransaction(reset) {
-            outerAngle = 0
-            innerAngle = 0
-        }
-
-        withAnimation(.linear(duration: outerDuration).repeatForever(autoreverses: false)) {
+        // Оборот за полторы минуты. Круг диаметром в четверть экрана при
+        // быстром вращении выглядит вертушкой и перетягивает на себя всё
+        // внимание, хотя сообщать ему нечего.
+        withAnimation(.linear(duration: 90).repeatForever(autoreverses: false)) {
             outerAngle = 360
         }
-        withAnimation(.linear(duration: innerDuration).repeatForever(autoreverses: false)) {
+        withAnimation(.linear(duration: 120).repeatForever(autoreverses: false)) {
             innerAngle = -360
         }
+    }
 
+    /// Дыхание свечения и волна — то, что зависит от состояния.
+    private func updateBreathing() {
         // Волна расходится только при работающем туннеле.
         //
         // Это единственный на экране признак того, что защита живая, а не
@@ -666,27 +657,26 @@ struct ContentView: View {
         // раздражает и сажает батарею.
         if state == .on {
             pulse = 1
-            pulseFade = 0.5
+            pulseFade = 0.45
             withAnimation(.easeOut(duration: 2.8).repeatForever(autoreverses: false)) {
                 pulse = 1.28
                 pulseFade = 0
             }
         } else {
-            withAnimation(.easeOut(duration: 0.4)) {
+            withAnimation(.easeOut(duration: 0.3)) {
                 pulse = 1
                 pulseFade = 0
             }
         }
 
         if state == .off {
-            withAnimation(.easeInOut(duration: 0.9)) {
+            withAnimation(.easeInOut(duration: 0.5)) {
                 glow = 1
                 boltScale = 1
             }
         } else {
-            // Дыхание замедлено почти вдвое: на глаз это спокойный вдох-выдох,
-            // а не мигание. Размах тоже меньше — движение должно ощущаться,
-            // а не бросаться в глаза.
+            // Спокойный вдох-выдох, а не мигание: размах небольшой, шаг
+            // медленный. Движение должно ощущаться, а не бросаться в глаза.
             withAnimation(.easeInOut(duration: state == .on ? 6.0 : 2.6).repeatForever()) {
                 glow = state == .on ? 1.06 : 1.11
             }
@@ -924,30 +914,31 @@ struct ContentView: View {
 
     /// Скорость и объём — то, ради чего люди смотрят на экран VPN.
     ///
-    /// Цифры считает ядро, приложение их только читает: ядро живёт в отдельном
-    /// процессе и кладёт свежие значения в общую папку раз в секунду. Отсюда и
-    /// TimelineView — он перечитывает файл ровно с тем же шагом.
+    /// Цифры считает ядро: оно живёт в отдельном процессе и кладёт свежие
+    /// значения в общую папку раз в секунду. Читает их TrafficMonitor в
+    /// фоновой очереди — в теле представления работе с диском не место.
     @ViewBuilder
     private var trafficRow: some View {
         if state == .on {
-            TimelineView(.periodic(from: .now, by: 1)) { _ in
-                let stats = TrafficStats.load()
-                let live = stats.isFresh
+            let stats = traffic.stats
+            // Свежесть важна: расширение могли выгрузить, и тогда цифры
+            // застынут. Показывать застывшую скорость как текущую нельзя —
+            // человек будет смотреть на «1.2 MB/с» при мёртвом туннеле.
+            let live = stats.isFresh
 
-                HStack(spacing: 10) {
-                    trafficTile(
-                        icon: "arrow.down",
-                        color: JT.green,
-                        speed: live ? stats.downSpeed : 0,
-                        total: stats.downTotal
-                    )
-                    trafficTile(
-                        icon: "arrow.up",
-                        color: JT.accent,
-                        speed: live ? stats.upSpeed : 0,
-                        total: stats.upTotal
-                    )
-                }
+            HStack(spacing: 10) {
+                trafficTile(
+                    icon: "arrow.down",
+                    color: JT.green,
+                    speed: live ? stats.downSpeed : 0,
+                    total: stats.downTotal
+                )
+                trafficTile(
+                    icon: "arrow.up",
+                    color: JT.accent,
+                    speed: live ? stats.upSpeed : 0,
+                    total: stats.upTotal
+                )
             }
             .transition(.opacity.combined(with: .move(edge: .top)))
         }
