@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="ru" data-lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Поддержка — Zyng</title>
+<meta name="description" content="Помощь по приложению Zyng: как добавить ключ и подписку, что делать при ошибках, как связаться с нами.">
+<meta name="author" content="KERIMLI CORP.">
+<link rel="canonical" href="https://zyng.online/support.html">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%235B8CFF'/><text x='50' y='72' font-size='68' font-family='Arial' font-weight='900' fill='white' text-anchor='middle'>Z</text></svg>">
+
+<script>
+(function () {
+  var saved = localStorage.getItem('zyng-lang');
+  var guess = (navigator.language || 'en').slice(0, 2).toLowerCase() === 'ru' ? 'ru' : 'en';
+  var lang = saved === 'ru' || saved === 'en' ? saved : guess;
+  document.documentElement.setAttribute('data-lang', lang);
+  document.documentElement.setAttribute('lang', lang);
+  window.setLang = function (value) {
+    localStorage.setItem('zyng-lang', value);
+    document.documentElement.setAttribute('data-lang', value);
+    document.documentElement.setAttribute('lang', value);
+  };
+})();
+</script>
+
+<style>
+  :root{
+    --bg1:#0E1014; --bg2:#171A20; --card:#1D2129; --stroke:#2E343F;
+    --text:#F2F5FA; --sub:#8A94A6; --body:#D4DAE4;
+    --accent:#5B8CFF; --accent2:#7A5CFF;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg1);
+    background-image:
+      radial-gradient(800px 420px at 50% -10%, rgba(91,140,255,.13), transparent 70%),
+      linear-gradient(180deg,var(--bg1),var(--bg2));
+    background-attachment:fixed;
+    color:var(--text); line-height:1.7; min-height:100vh; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:780px; margin:0 auto; padding:0 22px}
+  a{color:var(--accent)}
+
+  html[data-lang="ru"] [lang="en"]{display:none}
+  html[data-lang="en"] [lang="ru"]{display:none}
+
+  header{display:flex; align-items:center; justify-content:space-between; padding:22px 0; gap:16px; flex-wrap:wrap}
+  .logo{display:flex; align-items:center; gap:11px; font-weight:800; font-size:20px; color:var(--text); text-decoration:none}
+  .mark{
+    width:36px; height:36px; border-radius:11px; display:grid; place-items:center;
+    background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff;
+    font-weight:900; font-size:21px;
+  }
+  .navwrap{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+  header nav{display:flex; flex-wrap:wrap; gap:6px}
+  header nav a{color:var(--sub); text-decoration:none; padding:7px 12px; border-radius:9px; font-size:15px; font-weight:600}
+  header nav a:hover{color:var(--text); background:rgba(255,255,255,.05)}
+
+  .lang{display:flex; gap:2px; background:var(--card); border:1px solid var(--stroke); border-radius:10px; padding:3px}
+  .lang button{
+    font:inherit; font-size:13px; font-weight:700; letter-spacing:.4px;
+    color:var(--sub); background:none; border:0; cursor:pointer;
+    padding:5px 11px; border-radius:7px; transition:background .15s, color .15s;
+  }
+  .lang button:hover{color:var(--text)}
+  html[data-lang="ru"] .lang [data-set="ru"],
+  html[data-lang="en"] .lang [data-set="en"]{background:var(--accent); color:#fff}
+
+  h1{font-size:clamp(28px,5.5vw,38px); font-weight:900; letter-spacing:-.8px; margin:26px 0 18px}
+  h2{font-size:20px; font-weight:700; margin:38px 0 10px}
+  p,li{color:var(--body); font-size:16px}
+  ul{padding-left:22px; margin:8px 0}
+  li{margin:4px 0}
+  code{background:rgba(255,255,255,.07); padding:2px 6px; border-radius:5px; font-size:14px}
+
+  .box{background:var(--card); border:1px solid var(--stroke); border-radius:18px; padding:24px; margin:16px 0}
+  .mail{
+    display:inline-flex; align-items:center; gap:10px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff;
+    text-decoration:none; padding:14px 24px; border-radius:14px; font-weight:700; margin-top:14px
+  }
+  .steps{counter-reset:s; list-style:none; padding:0; margin-top:14px}
+  .steps li{
+    counter-increment:s; position:relative; padding-left:44px; margin:14px 0; color:var(--body)
+  }
+  .steps li::before{
+    content:counter(s); position:absolute; left:0; top:1px;
+    width:28px; height:28px; border-radius:9px; display:grid; place-items:center;
+    background:rgba(91,140,255,.16); border:1px solid rgba(91,140,255,.4);
+    color:var(--accent); font-weight:800; font-size:14px
+  }
+
+  details{border-bottom:1px solid var(--stroke); padding:15px 0}
+  details[open] summary{color:var(--accent)}
+  summary{cursor:pointer; font-weight:600; font-size:16px; list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:"+"; float:right; color:var(--sub); font-weight:700}
+  details[open] summary::after{content:"–"}
+  details p, details li{color:var(--sub); margin-top:8px}
+
+
+  /* Соцсети */
+  .social{display:flex; flex-wrap:wrap; gap:10px; margin-top:10px}
+  .social a{
+    display:inline-flex; align-items:center; gap:8px; text-decoration:none;
+    background:var(--card); border:1px solid var(--stroke); border-radius:12px;
+    padding:9px 14px; color:var(--text); font-size:14px; font-weight:600;
+    transition:border-color .2s, transform .12s ease;
+  }
+  .social a:hover{border-color:var(--accent); transform:translateY(-1px)}
+  .social svg{flex:none}
+
+  footer{border-top:1px solid var(--stroke); margin-top:56px; padding:34px 0 44px; color:var(--sub); font-size:14px}
+  .fgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:24px}
+  footer strong{color:var(--text); font-size:15px; display:block; margin-bottom:7px}
+  footer address{font-style:normal; line-height:1.75}
+  footer nav a{display:block; padding:3px 0; color:var(--sub); text-decoration:none}
+  footer nav a:hover{color:var(--text)}
+  .copy{border-top:1px solid var(--stroke); margin-top:26px; padding-top:20px; font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="logo" href="index.html"><span class="mark">Z</span> Zyng</a>
+    <div class="navwrap">
+      <nav>
+        <a href="index.html" lang="ru">Главная</a>
+        <a href="index.html" lang="en">Home</a>
+        <a href="privacy.html" lang="ru">Конфиденциальность</a>
+        <a href="privacy.html" lang="en">Privacy</a>
+      </nav>
+      <div class="lang">
+        <button type="button" data-set="ru" onclick="setLang('ru')">RU</button>
+        <button type="button" data-set="en" onclick="setLang('en')">EN</button>
+      </div>
+    </div>
+  </header>
+
+  <h1 lang="ru">Поддержка</h1>
+  <h1 lang="en">Support</h1>
+
+  <div class="box">
+    <p lang="ru">Возник вопрос или что-то не работает? Напиши нам — ответим и поможем.
+    Отвечаем на русском и английском.</p>
+    <p lang="en">Got a question, or something isn't working? Write to us — we'll help.
+    We reply in English and Russian.</p>
+    <a class="mail" href="mailto:kerimlicorp@gmail.com">✉️ kerimlicorp@gmail.com</a>
+  </div>
+
+  <h2 lang="ru">Как начать</h2>
+  <h2 lang="en">Getting started</h2>
+  <ol class="steps" lang="ru">
+    <li>Открой Zyng и нажми <b>«Добавить ключ / подписку»</b>.</li>
+    <li>Вставь ключ (<code>vless://</code>, <code>vmess://</code>, <code>trojan://</code>, <code>ss://</code>)
+        или ссылку-подписку <code>https://</code> от своего провайдера.</li>
+    <li>Нажми <b>«Добавить»</b> — серверы появятся в списке.</li>
+    <li>Выбери сервер и нажми большую кнопку на главном экране.</li>
+    <li>Разреши системный запрос на добавление VPN-конфигурации.</li>
+  </ol>
+  <ol class="steps" lang="en">
+    <li>Open Zyng and tap <b>Add key / subscription</b>.</li>
+    <li>Paste a key (<code>vless://</code>, <code>vmess://</code>, <code>trojan://</code>, <code>ss://</code>)
+        or an <code>https://</code> subscription link from your provider.</li>
+    <li>Tap <b>Add</b> — the servers appear in the list.</li>
+    <li>Pick a server and press the big button on the main screen.</li>
+    <li>Allow the system prompt to add a VPN configuration.</li>
+  </ol>
+
+  <h2 lang="ru">Частые вопросы</h2>
+  <h2 lang="en">Frequently asked</h2>
+
+  <details lang="ru">
+    <summary>Где взять ключ или подписку?</summary>
+    <p>Zyng не продаёт доступ к серверам и не предоставляет их. Ключ или
+    ссылку-подписку выдаёт провайдер, услугами которого ты уже пользуешься.
+    Приложение нужно, чтобы подключиться к тому, что у тебя уже есть.</p>
+  </details>
+  <details lang="en">
+    <summary>Where do I get a key or subscription?</summary>
+    <p>Zyng neither sells nor provides access to servers. The key or
+    subscription link comes from the provider you already use. The app exists
+    to connect you to what you already have.</p>
+  </details>
+
+  <details lang="ru">
+    <summary>Как добавить подписку?</summary>
+    <p>Скопируй ссылку подписки у провайдера, нажми «Добавить ключ / подписку»,
+    вставь ссылку и нажми «Добавить». Список серверов загрузится с этого адреса
+    и дальше будет обновляться сам.</p>
+  </details>
+  <details lang="en">
+    <summary>How do I add a subscription?</summary>
+    <p>Copy the subscription link from your provider, tap “Add key /
+    subscription”, paste it and tap “Add”. The server list loads from that
+    address and refreshes itself from then on.</p>
+  </details>
+
+  <details lang="ru">
+    <summary>Пишет «Подписка пустая или недоступна»</summary>
+    <ul>
+      <li>Ссылка неверная — открой её в браузере и проверь</li>
+      <li>Превышен лимит устройств у провайдера</li>
+      <li>Сервер провайдера временно недоступен — попробуй позже</li>
+      <li>Нет интернета — проверь Wi-Fi или мобильную сеть</li>
+    </ul>
+  </details>
+  <details lang="en">
+    <summary>It says the subscription is empty or unavailable</summary>
+    <ul>
+      <li>The link is wrong — open it in a browser and check</li>
+      <li>You are over your provider's device limit</li>
+      <li>The provider's server is temporarily down — try later</li>
+      <li>No internet — check Wi-Fi or mobile data</li>
+    </ul>
+  </details>
+
+  <details lang="ru">
+    <summary>Сервер помечен как «не поддерживается»</summary>
+    <p>Значит, у него транспорт, которого нет в ядре приложения — чаще всего
+    это xhttp. Выбери в той же подписке сервер той же страны с пометкой
+    tcp, ws, grpc, http или httpupgrade.</p>
+  </details>
+  <details lang="en">
+    <summary>A server is marked “unsupported”</summary>
+    <p>Its transport is not in the app's core — usually that means xhttp. Pick
+    a server for the same country in the same subscription marked tcp, ws,
+    grpc, http or httpupgrade.</p>
+  </details>
+
+  <details lang="ru">
+    <summary>Как выбрать другой сервер?</summary>
+    <p>Нажми на карточку локации или на иконку списка вверху экрана.
+    Коснись нужного сервера — он будет использоваться при следующем подключении.
+    Рядом с каждым сервером показана задержка в миллисекундах.</p>
+  </details>
+  <details lang="en">
+    <summary>How do I switch servers?</summary>
+    <p>Tap the location card, or the list icon at the top of the screen. Tap
+    the server you want and it will be used for the next connection. Each
+    server shows its latency in milliseconds.</p>
+  </details>
+
+  <details lang="ru">
+    <summary>Почему медленное соединение?</summary>
+    <p>Скорость зависит от сервера и его загруженности, расстояния до него,
+    качества твоего интернета и нагрузки в сети провайдера.
+    Попробуй выбрать сервер с меньшей задержкой.</p>
+  </details>
+  <details lang="en">
+    <summary>Why is the connection slow?</summary>
+    <p>Speed depends on the server and how busy it is, how far away it is, the
+    quality of your own connection and the load on your ISP. Try a server with
+    lower latency.</p>
+  </details>
+
+  <details lang="ru">
+    <summary>Какие данные собирает Zyng?</summary>
+    <p>Никаких. Мы не собираем историю сайтов, DNS-запросы, ключи, подписки,
+    время использования и любые персональные данные. Приложение работает
+    локально на устройстве. Подробнее — в
+    <a href="privacy.html">Политике конфиденциальности</a>.</p>
+  </details>
+  <details lang="en">
+    <summary>What data does Zyng collect?</summary>
+    <p>None. We collect no browsing history, DNS queries, keys, subscriptions,
+    usage times or personal data of any kind. The app runs locally on your
+    device. See the <a href="privacy.html">Privacy policy</a> for details.</p>
+  </details>
+
+  <details lang="ru">
+    <summary>Какие протоколы поддерживаются?</summary>
+    <ul>
+      <li><b>VLESS</b> — лёгкий протокол с низкой задержкой</li>
+      <li><b>VMess</b> — шифрующий протокол с динамическим портом</li>
+      <li><b>Trojan</b> — маскирует трафик под обычный HTTPS</li>
+      <li><b>Shadowsocks</b> — простой и быстрый прокси</li>
+      <li><b>Hysteria2</b> и <b>TUIC</b> — высокоскоростные протоколы на UDP</li>
+      <li><b>SOCKS</b> — классический прокси</li>
+    </ul>
+  </details>
+  <details lang="en">
+    <summary>Which protocols are supported?</summary>
+    <ul>
+      <li><b>VLESS</b> — lightweight, low latency</li>
+      <li><b>VMess</b> — encrypted, with a dynamic port</li>
+      <li><b>Trojan</b> — disguises traffic as ordinary HTTPS</li>
+      <li><b>Shadowsocks</b> — a simple, fast proxy</li>
+      <li><b>Hysteria2</b> and <b>TUIC</b> — high-speed protocols over UDP</li>
+      <li><b>SOCKS</b> — the classic proxy</li>
+    </ul>
+  </details>
+
+  <details lang="ru">
+    <summary>Приложение вылетает</summary>
+    <ul>
+      <li>Перезагрузи iPhone</li>
+      <li>Удали и установи приложение заново</li>
+      <li>Проверь, что установлена последняя версия iOS</li>
+      <li>Напиши на <a href="mailto:kerimlicorp@gmail.com">kerimlicorp@gmail.com</a>
+          с описанием проблемы, моделью iPhone и версией iOS</li>
+    </ul>
+  </details>
+  <details lang="en">
+    <summary>The app crashes</summary>
+    <ul>
+      <li>Restart your iPhone</li>
+      <li>Delete the app and install it again</li>
+      <li>Check that you are on the latest iOS</li>
+      <li>Write to <a href="mailto:kerimlicorp@gmail.com">kerimlicorp@gmail.com</a>
+          with what happened, your iPhone model and iOS version</li>
+    </ul>
+  </details>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="fgrid">
+      <div>
+        <strong>KERIMLI CORP.</strong>
+        <address>
+          1942 E 8th St, Apt 2F<br>
+          Brooklyn, NY 11223-3216<br>
+          United States
+        </address>
+      </div>
+      <div>
+        <strong lang="ru">Контакты</strong><strong lang="en">Contact</strong>
+        <a href="mailto:kerimlicorp@gmail.com">kerimlicorp@gmail.com</a>
+        <div class="social">
+          <a href="https://instagram.com/zyngfast" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41-.56-.22-.96-.48-1.38-.9-.42-.42-.68-.82-.9-1.38-.16-.42-.36-1.06-.41-2.23C2.17 15.58 2.16 15.2 2.16 12s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41C8.42 2.17 8.8 2.16 12 2.16zm0 3.18a6.66 6.66 0 1 0 0 13.326.66 6.66 0 0 0 0-13.32zm0 10.98a4.32 4.32 0 1 1 0-8.64 4.32 4.32 0 0 1 0 8.64zm8.48-11.24a1.56 1.56 0 1 1-3.12 0 1.56 1.56 0 0 1 3.12 0z"/></svg>@zyngfast</a>
+          <a href="https://t.me/zyngfast" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3 18.6 20c-.25 1.1-.9 1.37-1.83.85l-5.05-3.72-2.44 2.35c-.27.27-.5.5-1.02.5l.36-5.149.36-8.46c.4-.36-.09-.56-.63-.2L5.79 11.9.82 10.35c-1.08-.34-1.1-1.08.23-1.6L20.5 2.72c.9-.33 1.69.2 1.4 1.58z"/></svg>@zyngfast</a>
+        </div>
+      </div>
+      <nav>
+        <strong lang="ru">Разделы</strong><strong lang="en">Pages</strong>
+        <a href="index.html" lang="ru">Главная</a>
+        <a href="index.html" lang="en">Home</a>
+        <a href="privacy.html" lang="ru">Политика конфиденциальности</a>
+        <a href="privacy.html" lang="en">Privacy policy</a>
+      </nav>
+    </div>
+    <div class="copy" lang="ru">© 2026 KERIMLI CORP. Все права защищены.</div>
+    <div class="copy" lang="en">© 2026 KERIMLI CORP. All rights reserved.</div>
+  </div>
+</footer>
+
+</body>
+</html>

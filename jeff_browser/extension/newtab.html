@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Jeff</title>
+<style>
+  :root{--bg:#0f1116;--card:#22262d;--card2:#2d323b;--bd:#363c46;--tx:#e6e8ec;--mut:#8a9099;--acc:#5c6675}
+  html,body{height:100%;margin:0;font-family:"Segoe UI",Arial,sans-serif;
+    background:radial-gradient(1200px 700px at 50% -12%,#1b2230,var(--bg));color:var(--tx)}
+  .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:26px;padding:70px 16px 40px}
+  .logo{font-size:64px;font-weight:900;letter-spacing:8px;
+    background:linear-gradient(#c7d0e0,#7f8a99);-webkit-background-clip:text;background-clip:text;color:transparent}
+  form{display:flex;width:min(640px,90%);background:var(--card);border:1px solid var(--bd);border-radius:28px;overflow:hidden}
+  input{flex:1;border:0;background:transparent;color:var(--tx);font-size:17px;padding:16px 22px;outline:none}
+  form button{border:0;background:var(--acc);color:#fff;font-size:15px;font-weight:700;padding:0 26px;cursor:pointer}
+  .dial{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;width:min(640px,92%);margin-top:6px}
+  @media(max-width:520px){.dial{grid-template-columns:repeat(3,1fr)}}
+  .tile{display:flex;flex-direction:column;align-items:center;gap:8px;text-decoration:none;color:var(--tx)}
+  .ico{width:60px;height:60px;border-radius:18px;background:var(--card);border:1px solid var(--bd);
+    display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;transition:.15s}
+  .tile:hover .ico{background:var(--card2);transform:translateY(-2px)}
+  .tile span{font-size:12px;color:var(--mut)}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <img class="logo" src="jeff-logo.png" alt="Jeff" style="height:96px;width:auto">
+    <style>.logo{margin-bottom:4px}</style>
+    <form action="https://www.google.com/search" method="GET">
+      <input name="q" placeholder="Поиск в Google…" autofocus>
+      <button type="submit">Найти</button>
+    </form>
+    <div class="dial">
+      <a class="tile" href="https://www.google.com"><div class="ico" style="color:#4285F4">G</div><span>Google</span></a>
+      <a class="tile" href="https://www.youtube.com"><div class="ico" style="color:#FF0000">▶</div><span>YouTube</span></a>
+      <a class="tile" href="https://mail.google.com"><div class="ico" style="color:#EA4335">✉</div><span>Gmail</span></a>
+      <a class="tile" href="https://yandex.ru"><div class="ico" style="color:#FC3F1D">Я</div><span>Yandex</span></a>
+      <a class="tile" href="https://vk.com"><div class="ico" style="color:#0077FF">VK</div><span>ВКонтакте</span></a>
+      <a class="tile" href="https://web.telegram.org"><div class="ico" style="color:#2AABEE">✈</div><span>Telegram</span></a>
+      <a class="tile" href="https://github.com"><div class="ico">⌥</div><span>GitHub</span></a>
+      <a class="tile" href="https://ru.wikipedia.org"><div class="ico">W</div><span>Wikipedia</span></a>
+      <a class="tile" href="https://translate.google.com"><div class="ico" style="color:#4285F4">文</div><span>Перевод</span></a>
+      <a class="tile" href="https://www.google.com/maps"><div class="ico" style="color:#34A853">🗺</div><span>Карты</span></a>
+    </div>
+  </div>
+</body>
+</html>

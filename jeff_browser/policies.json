@@ -1,0 +1,31 @@
+{
+  "policies": {
+    "SearchEngines": {
+      "Default": "Google",
+      "Add": [
+        {
+          "Name": "Yandex",
+          "URLTemplate": "https://yandex.ru/search/?text={searchTerms}",
+          "Method": "GET",
+          "IconURL": "https://yandex.ru/favicon.ico"
+        },
+        {
+          "Name": "DuckDuckGo",
+          "URLTemplate": "https://duckduckgo.com/?q={searchTerms}",
+          "Method": "GET"
+        }
+      ]
+    },
+    "NoDefaultBookmarks": true,
+    "Bookmarks": [
+      { "Title": "Google",  "URL": "https://www.google.com",  "Placement": "toolbar" },
+      { "Title": "YouTube", "URL": "https://www.youtube.com", "Placement": "toolbar" },
+      { "Title": "Yandex",  "URL": "https://yandex.ru",       "Placement": "toolbar" }
+    ],
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "DisableTelemetry": true,
+    "DisablePocket": true,
+    "DontCheckDefaultBrowser": true
+  }
+}

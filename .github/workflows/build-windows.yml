@@ -1,0 +1,214 @@
+name: Build Zyng Desktop
+
+on:
+  push:
+    branches: [ claude/icq-messenger-b0bt2n ]
+    paths:
+      - 'qipcall_client/**'
+      - '.github/workflows/build-windows.yml'
+  workflow_dispatch:
+
+jobs:
+  # ── WINDOWS (Python 3.8 — совместимость с Windows 7 / 8 / 8.1 / 10 / 11) ───
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.8'   # последняя версия Python с поддержкой Windows 7
+      - name: Install deps
+        # версии пакетов, ещё поддерживающие Python 3.8
+        run: pip install "pyinstaller==6.6.0" "customtkinter==5.2.2" "pillow<11" "darkdetect" "pyyaml"
+      - name: Download xray-core (Windows 64-bit)
+        shell: pwsh
+        run: |
+          $url = "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-windows-64.zip"
+          Invoke-WebRequest -Uri $url -OutFile xray.zip
+          Expand-Archive -Path xray.zip -DestinationPath xray_bin -Force
+          Copy-Item xray_bin/xray.exe qipcall_client/xray.exe
+      - name: Download sing-box (Windows 64-bit)
+        shell: pwsh
+        run: |
+          $json = Invoke-RestMethod "https://api.github.com/repos/SagerNet/sing-box/releases/latest"
+          $asset = $json.assets | Where-Object { $_.name -match "windows-amd64.*\.zip$" } | Select-Object -First 1
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile sb.zip
+          Expand-Archive -Path sb.zip -DestinationPath sb_bin -Force
+          $exe = Get-ChildItem -Recurse sb_bin -Filter sing-box.exe | Select-Object -First 1
+          Copy-Item $exe.FullName qipcall_client/sing-box.exe
+      - name: Download routing data (geoip/geosite)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"   -OutFile qipcall_client/geoip.dat
+          Invoke-WebRequest "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat" -OutFile qipcall_client/geosite.dat
+      - name: Download wintun (для TUN-режима)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://www.wintun.net/builds/wintun-0.14.1.zip" -OutFile wintun.zip
+          Expand-Archive -Path wintun.zip -DestinationPath wintun_bin -Force
+          Copy-Item wintun_bin/wintun/bin/amd64/wintun.dll qipcall_client/wintun.dll
+      - name: Download font (Inter)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz,wght%5D.ttf" -OutFile qipcall_client/Inter.ttf
+      - name: Download flags
+        shell: bash
+        run: |
+          mkdir -p qipcall_client/flags
+          for cc in fr de fi us my nl ru gb pl se tr jp sg ca es it ua lv ee lt ch at hk kr in ae kz ge no dk is ie be pt gr cz sk hu ro bg rs hr si md by am az cy lu mt br mx ar cl co pe cn tw vn th id ph au nz il sa qa bh kw om eg za ng ma ir iq pk bd lk np uz kg tj tm mn; do
+            curl -sL "https://flagcdn.com/w80/$cc.png" -o "qipcall_client/flags/$cc.png" || true
+          done
+      - name: Build EXE
+        shell: pwsh
+        working-directory: qipcall_client
+        run: |
+          pyinstaller --noconfirm --onefile --windowed `
+            --name "Zyng" `
+            --icon "icon.ico" `
+            --collect-all customtkinter `
+            --hidden-import yaml `
+            --add-binary "xray.exe;." `
+            --add-binary "sing-box.exe;." `
+            --add-binary "wintun.dll;." `
+            --add-data "geoip.dat;." `
+            --add-data "geosite.dat;." `
+            --add-data "Inter.ttf;." `
+            --add-data "logo_white.png;." `
+            --add-data "orb_on.png;." `
+            --add-data "orb_off.png;." `
+            --add-data "icon.ico;." `
+            --add-data "flags;flags" `
+            qipcall.py
+      - name: Publish release (zyng)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: zyng
+          name: Zyng VPN
+          files: qipcall_client/dist/Zyng.exe
+          body: |
+            <p align="center"><img src="https://raw.githubusercontent.com/kerimlirashad/kerimlirashad/claude/icq-messenger-b0bt2n/qipcall_client/zyng_banner.png" width="440" alt="Zyng"></p>
+            <h2 align="center">Zyng VPN 2.0</h2>
+            <p align="center">Вставь ключ <code>vless:// · vmess:// · trojan:// · ss://</code> или ссылку-подписку — и нажми «Подключиться».</p>
+
+            <p align="center"><sub>Раньше приложение называлось JeffTUN. Это оно же: ключи и подписки переносятся при первом запуске сами.</sub></p>
+
+            <table>
+              <tr>
+                <td><b>🪟 Windows</b></td>
+                <td>
+                  <a href="https://github.com/kerimlirashad/kerimlirashad/releases/download/zyng/Zyng.exe"><img src="https://img.shields.io/badge/Скачать-x64-5B8CFF?style=for-the-badge&logo=windows&logoColor=white"></a>
+                  <sub>Windows 7 · 8 · 10 · 11</sub>
+                </td>
+              </tr>
+              <tr>
+                <td><b>🐧 Linux</b></td>
+                <td>
+                  <a href="https://github.com/kerimlirashad/kerimlirashad/releases/download/zyng/Zyng-linux"><img src="https://img.shields.io/badge/Скачать-x64-5B8CFF?style=for-the-badge&logo=linux&logoColor=white"></a>
+                  <sub><code>chmod +x Zyng-linux</code> и запускай</sub>
+                </td>
+              </tr>
+              <tr>
+                <td><b>📱 iPhone</b></td>
+                <td>
+                  <a href="https://zyng.online"><img src="https://img.shields.io/badge/Zyng-iOS-5B8CFF?style=for-the-badge&logo=apple&logoColor=white"></a>
+                  <sub>скоро в App Store · <a href="https://zyng.online">zyng.online</a></sub>
+                </td>
+              </tr>
+              <tr>
+                <td><b>📺 Android TV</b></td>
+                <td>
+                  <a href="https://github.com/Happ-proxy/happ-android/releases/latest"><img src="https://img.shields.io/badge/Zyng-Android_TV-39D98A?style=for-the-badge&logo=android&logoColor=white"></a>
+                  <sub>установи и вставь свою подписку Zyng</sub>
+                </td>
+              </tr>
+              <tr>
+                <td><b>🍎 Apple TV</b></td>
+                <td>
+                  <a href="https://apps.apple.com/app/happ-proxy-utility/id6504287215"><img src="https://img.shields.io/badge/Zyng-Apple_TV-000000?style=for-the-badge&logo=apple&logoColor=white"></a>
+                  <sub>установи на tvOS и вставь свою подписку Zyng</sub>
+                </td>
+              </tr>
+            </table>
+
+            <blockquote>
+            <b>⚠️ Windows ругается «SmartScreen защитил ваш компьютер»?</b><br>
+            Это нормально для новых программ без платной подписи. Нажми
+            <b>«Подробнее» → «Выполнить в любом случае»</b> — приложение безопасно.
+            </blockquote>
+
+            <p align="center">
+              <a href="https://zyng.online"><img src="https://img.shields.io/badge/🌐_Сайт-zyng.online-5B8CFF?style=for-the-badge"></a>
+              <a href="https://t.me/zyngfast"><img src="https://img.shields.io/badge/Telegram-@zyngfast-2AABEE?style=for-the-badge&logo=telegram&logoColor=white"></a>
+            </p>
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── macOS убран: раннеры дорогие и держат очередь. Windows/Linux не зависят от него.
+
+  # ── LINUX ────────────────────────────────────────────────────────────────
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk
+          pip install pyinstaller customtkinter pillow pyyaml
+      - name: Download xray-core (Linux 64-bit)
+        run: |
+          curl -L -o xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+          mkdir -p xray_bin && unzip -o xray.zip -d xray_bin
+          cp xray_bin/xray qipcall_client/xray
+          chmod +x qipcall_client/xray
+      - name: Download sing-box (Linux 64-bit)
+        run: |
+          url=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest \
+            | grep browser_download_url | grep 'linux-amd64.tar.gz' | grep -v abi | head -1 | cut -d'"' -f4)
+          curl -L -o sb.tar.gz "$url"
+          mkdir -p sb_bin && tar -xzf sb.tar.gz -C sb_bin
+          cp "$(find sb_bin -name sing-box -type f | head -1)" qipcall_client/sing-box
+          chmod +x qipcall_client/sing-box
+      - name: Download routing data (geoip/geosite)
+        run: |
+          curl -L -o qipcall_client/geoip.dat   "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
+          curl -L -o qipcall_client/geosite.dat "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+      - name: Download font (Inter)
+        run: |
+          curl -L -o qipcall_client/Inter.ttf "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz,wght%5D.ttf"
+      - name: Download flags
+        run: |
+          mkdir -p qipcall_client/flags
+          for cc in fr de fi us my nl ru gb pl se tr jp sg ca es it ua lv ee lt ch at hk kr in ae kz ge no dk is ie be pt gr cz sk hu ro bg rs hr si md by am az cy lu mt br mx ar cl co pe cn tw vn th id ph au nz il sa qa bh kw om eg za ng ma ir iq pk bd lk np uz kg tj tm mn; do
+            curl -sL "https://flagcdn.com/w80/$cc.png" -o "qipcall_client/flags/$cc.png" || true
+          done
+      - name: Build Linux binary
+        working-directory: qipcall_client
+        run: |
+          pyinstaller --noconfirm --onefile \
+            --name "Zyng-linux" \
+            --collect-all customtkinter \
+            --hidden-import yaml \
+            --add-binary "xray:." \
+            --add-binary "sing-box:." \
+            --add-data "geoip.dat:." \
+            --add-data "geosite.dat:." \
+            --add-data "Inter.ttf:." \
+            --add-data "logo_white.png:." \
+            --add-data "orb_on.png:." \
+            --add-data "orb_off.png:." \
+            --add-data "flags:flags" \
+            qipcall.py
+      - name: Publish release (zyng)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: zyng
+          name: Zyng VPN
+          files: qipcall_client/dist/Zyng-linux
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

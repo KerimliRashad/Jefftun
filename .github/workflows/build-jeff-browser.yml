@@ -1,0 +1,149 @@
+name: Build Jeff Browser
+
+on:
+  workflow_dispatch:   # r3dfox-версия отключена от авто-сборки — теперь основной браузер собственный (build-jeff-browser-app)
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download r3dfox (Firefox-форк для Win7–11)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $headers = @{ "User-Agent" = "jeff-browser"; "Authorization" = "token $env:GH_TOKEN" }
+          $releases = Invoke-RestMethod "https://api.github.com/repos/Eclipse-Community/r3dfox/releases?per_page=15" -Headers $headers
+
+          function Pick($pattern) {
+            foreach ($r in $releases) {
+              $a = $r.assets | Where-Object { $_.name -match $pattern } | Select-Object -First 1
+              if ($a) { return $a }
+            }
+            return $null
+          }
+
+          # 1) портативный win64 zip/7z; 2) любой win zip/7z; 3) win установщик .exe (распакуем 7-Zip)
+          $asset = Pick("win64.*\.(zip|7z)$")
+          if (-not $asset) { $asset = Pick("win.*\.(zip|7z)$") }
+          $isInstaller = $false
+          if (-not $asset) { $asset = Pick("win64.*\.exe$"); $isInstaller = $true }
+          if (-not $asset) { $asset = Pick("win.*\.exe$"); $isInstaller = $true }
+
+          if (-not $asset) {
+            Write-Host "Ассеты последнего релиза:"; $releases[0].assets | ForEach-Object { Write-Host " - $($_.name)" }
+            throw "Не нашёл сборку r3dfox под Windows"
+          }
+
+          Write-Host "Качаю: $($asset.name)"
+          Invoke-WebRequest $asset.browser_download_url -OutFile browser.archive -Headers @{ "User-Agent" = "jeff-browser" }
+          New-Item -ItemType Directory -Force -Path JeffBrowser | Out-Null
+          if ($asset.name -match "\.zip$") {
+            Expand-Archive browser.archive -DestinationPath JeffBrowser -Force
+          } else {
+            # .7z или установщик .exe (NSIS) — оба распаковываются 7-Zip
+            7z x browser.archive -oJeffBrowser -y
+          }
+
+      - name: Внедряем брендинг Jeff + поисковики
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Recurse JeffBrowser -Include firefox.exe,r3dfox.exe,waterfox.exe |
+                 Select-Object -First 1
+          if (-not $exe) { throw "Не нашёл исполняемый файл браузера" }
+          $dir = $exe.Directory.FullName
+          Write-Host "Папка браузера: $dir"
+
+          New-Item -ItemType Directory -Force -Path "$dir\distribution" | Out-Null
+          Copy-Item jeff_browser/policies.json "$dir\distribution\policies.json" -Force
+
+          New-Item -ItemType Directory -Force -Path "$dir\defaults\pref" | Out-Null
+          Copy-Item jeff_browser/autoconfig.js "$dir\defaults\pref\autoconfig.js" -Force
+
+          Copy-Item jeff_browser/mozilla.cfg   "$dir\mozilla.cfg"   -Force
+          Copy-Item jeff_browser/jeff-start.html "$dir\jeff-start.html" -Force
+          Copy-Item jeff_browser/README.md     "$dir\README.txt"    -Force
+
+          # встроенное расширение Jeff «новая вкладка» — прячет логотип r3dfox
+          New-Item -ItemType Directory -Force -Path "$dir\distribution\extensions" | Out-Null
+          Compress-Archive -Path jeff_browser/extension/* -DestinationPath ext.zip -Force
+          Copy-Item ext.zip "$dir\distribution\extensions\jeffnewtab@jeff.xpi" -Force
+
+          # переименовываем главный exe в Jeff.exe (брендинг лаунчера)
+          Copy-Item $exe.FullName "$dir\Jeff.exe" -Force
+
+          # ставим логотип Jeff на иконку exe (rcedit, без пересборки)
+          try {
+            Invoke-WebRequest "https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe" -OutFile rcedit.exe
+            & .\rcedit.exe "$dir\Jeff.exe" --set-icon "jeff_browser\jeff.ico"
+            & .\rcedit.exe "$dir\$($exe.Name)" --set-icon "jeff_browser\jeff.ico"
+            Write-Host "Иконка Jeff установлена"
+          } catch { Write-Host "rcedit пропущен: $_" }
+
+          # ── Патч бренда r3dfox → Jeff прямо в упаковке (без пересборки движка) ──
+          try {
+            foreach ($rel in @("browser\omni.ja", "omni.ja")) {
+              $omni = Join-Path $dir $rel
+              if (-not (Test-Path $omni)) { continue }
+              $work = Join-Path $env:RUNNER_TEMP ("omni_" + [IO.Path]::GetRandomFileName())
+              New-Item -ItemType Directory -Force -Path $work | Out-Null
+              7z x $omni "-o$work" -y | Out-Null
+              Get-ChildItem -Recurse $work -Include brand.ftl,brand.properties,brand.dtd -ErrorAction SilentlyContinue | ForEach-Object {
+                $t = Get-Content $_.FullName -Raw
+                $t = $t -replace 'r3dfox','Jeff' -replace 'Eclipse Community','Jeff' -replace 'Eclipse','Jeff'
+                Set-Content $_.FullName -Value $t -NoNewline -Encoding UTF8
+              }
+              Remove-Item $omni -Force
+              Push-Location $work
+              7z a -tzip -mx=0 "$omni" "*" | Out-Null   # store (без сжатия) — Firefox читает
+              Pop-Location
+              Write-Host "Пропатчен бренд в $rel"
+            }
+          } catch { Write-Host "Патч omni.ja пропущен: $_" }
+
+      - name: Упаковываем архив и self-extract .exe
+        shell: pwsh
+        run: |
+          Compress-Archive -Path JeffBrowser/* -DestinationPath JeffBrowser-win64.zip -Force
+          7z a -mx=5 JeffBrowser.7z .\JeffBrowser\* | Out-Null
+          $sfx = "C:\Program Files\7-Zip\7z.sfx"
+          & cmd /c "copy /b `"$sfx`"+JeffBrowser.7z JeffBrowser-Setup.exe"
+          if (-not (Test-Path JeffBrowser-Setup.exe)) { throw "Не собрался Setup.exe" }
+
+      - name: Публикуем релиз (jeffbrowser)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: jeffbrowser
+          name: Jeff Browser 🦈
+          files: |
+            JeffBrowser-win64.zip
+            JeffBrowser-Setup.exe
+          body: |
+            <h2 align="center">Jeff Browser 🦈</h2>
+            <p align="center">Быстрый браузер на движке Firefox (r3dfox). Работает на <b>Windows 7 / 8 / 8.1 / 10 / 11</b>.</p>
+            <p align="center">Поиск <b>Google</b> по умолчанию · Yandex · DuckDuckGo · телеметрия выключена.</p>
+
+            <p align="center">
+              <a href="https://github.com/kerimlirashad/kerimlirashad/releases/download/jeffbrowser/JeffBrowser-win64.zip"><img src="https://img.shields.io/badge/Jeff_Browser-Windows_x64-2ea043?style=for-the-badge&logo=windows&logoColor=white"></a>
+            </p>
+
+            <blockquote>
+            <b>Как запустить:</b> распакуй архив → запусти <code>Jeff.exe</code>. Установка не нужна (портативный).<br>
+            Windows может показать <b>SmartScreen</b> — «Подробнее» → «Выполнить в любом случае».
+            </blockquote>
+
+            <p align="center"><sub>Движок: r3dfox / Mozilla Firefox (MPL 2.0). Спасибо Eclipse-Community/r3dfox.</sub></p>
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Добавляем браузер (.exe) на страницу JeffTUN
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: jefftun
+          files: JeffBrowser-Setup.exe
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

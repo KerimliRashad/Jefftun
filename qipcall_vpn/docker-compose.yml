@@ -1,0 +1,75 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vpn
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: vpndb
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vpn -d vpndb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  xray:
+    image: teddysun/xray:latest
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./xray:/etc/xray
+    command: ["xray", "run", "-config", "/etc/xray/config.json"]
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://vpn:${DB_PASSWORD}@db:5432/vpndb
+      SECRET_KEY: ${SECRET_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      PANEL_DOMAIN: ${PANEL_DOMAIN:-localhost}
+      SERVER_IP: ${SERVER_IP:-127.0.0.1}
+      REALITY_PRIVATE_KEY: ${REALITY_PRIVATE_KEY}
+      REALITY_PUBLIC_KEY: ${REALITY_PUBLIC_KEY}
+      REALITY_SHORT_ID: ${REALITY_SHORT_ID}
+      REALITY_SNI: ${REALITY_SNI:-www.microsoft.com}
+    volumes:
+      - ./xray:/app/xray
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.25-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "8443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend:/usr/share/nginx/html:ro
+      - ssl_data:/etc/nginx/ssl
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    depends_on:
+      - backend
+    command: >-
+      sh -c "apk add --no-cache openssl &&
+      mkdir -p /etc/nginx/ssl /var/www/certbot &&
+      if [ -f /etc/letsencrypt/live/${PANEL_DOMAIN:-localhost}/fullchain.pem ]; then
+      cp -fL /etc/letsencrypt/live/${PANEL_DOMAIN:-localhost}/fullchain.pem /etc/nginx/ssl/cert.pem &&
+      cp -fL /etc/letsencrypt/live/${PANEL_DOMAIN:-localhost}/privkey.pem /etc/nginx/ssl/key.pem;
+      else
+      [ -f /etc/nginx/ssl/cert.pem ] || openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout /etc/nginx/ssl/key.pem -out /etc/nginx/ssl/cert.pem -subj '/CN=qipcall/O=JeffTUN/C=RU';
+      fi &&
+      nginx -g 'daemon off;'"
+
+volumes:
+  pg_data:
+  ssl_data:
+  certbot_conf:
+  certbot_www:

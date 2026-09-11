@@ -1,0 +1,75 @@
+name: Build Jeff Browser (own)
+
+on:
+  push:
+    branches: [ claude/icq-messenger-b0bt2n ]
+    paths:
+      - 'jeff_browser_app/**'
+      - '.github/workflows/build-jeff-browser-app.yml'
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.8'   # совместимость с Windows 7 (последний Python с Win7)
+      - name: Install deps
+        run: pip install "pyqt5==5.15.2" "pyqtwebengine==5.15.2" "pyinstaller==6.6.0"
+      - name: Download xray-core (для VPN в браузере)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-windows-64.zip" -OutFile xray.zip
+          Expand-Archive xray.zip -DestinationPath xray_bin -Force
+          Copy-Item xray_bin/xray.exe jeff_browser_app/xray.exe
+      - name: Build browser
+        working-directory: jeff_browser_app
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --onedir --windowed `
+            --name "JeffBrowser" `
+            --icon "jeff.ico" `
+            --add-data "jeff.ico;." `
+            --add-binary "xray.exe;." `
+            --collect-all PyQt5 `
+            jeff_browser.py
+      - name: Package (zip + self-extract exe)
+        working-directory: jeff_browser_app
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/JeffBrowser/* -DestinationPath JeffBrowser-app-win64.zip -Force
+          7z a -mx=5 JB.7z .\dist\JeffBrowser\* | Out-Null
+          $sfx = "C:\Program Files\7-Zip\7z.sfx"
+          & cmd /c "copy /b `"$sfx`"+JB.7z JeffBrowser-Setup.exe"
+      - name: Publish release (jeffbrowser)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: jeffbrowser
+          name: Jeff Browser
+          files: |
+            jeff_browser_app/JeffBrowser-app-win64.zip
+            jeff_browser_app/JeffBrowser-Setup.exe
+          body: |
+            <h2 align="center">Jeff Browser 🔴</h2>
+            <p align="center"><b>Собственный</b> браузер Jeff на движке Chromium (Qt WebEngine). Свой интерфейс, вкладки, Speed Dial, тёмная тема. Без r3dfox.</p>
+            <p align="center">Поиск Google · плитки сайтов · минимализм.</p>
+            <p align="center">
+              <a href="https://github.com/kerimlirashad/kerimlirashad/releases/download/jeffbrowser/JeffBrowser-Setup.exe"><img src="https://img.shields.io/badge/Jeff_Browser-Windows-2ea043?style=for-the-badge&logo=windows&logoColor=white"></a>
+            </p>
+            <blockquote>Распакуй архив и запусти <code>JeffBrowser.exe</code> (или Setup.exe). Установка не нужна.<br>
+            Windows 10/11 — точно; Windows 7/8 — по возможности (Qt WebEngine).<br>
+            SmartScreen: «Подробнее» → «Выполнить в любом случае».</blockquote>
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Добавляем браузер (.exe) на страницу JeffTUN
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: jefftun
+          files: jeff_browser_app/JeffBrowser-Setup.exe
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

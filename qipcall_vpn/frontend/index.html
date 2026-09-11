@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JeffTUN VPN — быстрый VPN с обходом блокировок</title>
+<link rel="icon" type="image/png" href="/logo.png">
+<style>
+  :root{--bg:#0a0e17;--card:#131926;--acc:#5b8def;--acc2:#7c5cff;--text:#e8edf5;--muted:#8a97ad;--ok:#3fce6a}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 20px}
+  header{padding:20px 0;display:flex;align-items:center;justify-content:space-between}
+  .logo{font-size:22px;font-weight:900;letter-spacing:-.5px}
+  .logo span{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .nav-btn{padding:9px 18px;border-radius:10px;background:rgba(255,255,255,.06);font-size:14px;font-weight:600;border:1px solid rgba(255,255,255,.08)}
+  .hero{text-align:center;padding:70px 0 50px}
+  .hero h1{font-size:clamp(32px,6vw,56px);font-weight:900;letter-spacing:-1.5px;line-height:1.1;margin-bottom:18px}
+  .hero h1 span{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .hero p{font-size:clamp(16px,2.5vw,20px);color:var(--muted);max-width:620px;margin:0 auto 32px}
+  .cta{display:inline-flex;gap:12px;flex-wrap:wrap;justify-content:center}
+  .btn{padding:15px 30px;border-radius:14px;font-size:16px;font-weight:700;border:none;cursor:pointer;transition:transform .15s}
+  .btn:active{transform:scale(.96)}
+  .btn.primary{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff;box-shadow:0 8px 30px rgba(91,141,239,.4)}
+  .btn.ghost{background:rgba(255,255,255,.06);color:var(--text);border:1px solid rgba(255,255,255,.12)}
+  .section-title{text-align:center;font-size:clamp(24px,4vw,36px);font-weight:800;margin:60px 0 8px;letter-spacing:-.5px}
+  .section-sub{text-align:center;color:var(--muted);margin-bottom:40px}
+  .protocols{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+  .proto{background:var(--card);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:24px}
+  .proto h3{font-size:20px;font-weight:800;margin-bottom:6px}
+  .proto .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .tag{font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;background:rgba(91,141,239,.15);color:var(--acc)}
+  .feats{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+  .feat{background:var(--card);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:24px}
+  .feat .ico{font-size:32px;margin-bottom:10px}
+  .feat h4{font-size:17px;font-weight:700;margin-bottom:6px}
+  .feat p{color:var(--muted);font-size:14px}
+  .apps{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:26px}
+  .app{background:var(--card);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px 22px;font-weight:700;font-size:15px;cursor:pointer;transition:transform .15s}
+  .app:active{transform:scale(.96)}
+  .dl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+  .dl-card{background:var(--card);border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:20px}
+  .dl-card.highlight{border-color:var(--acc);box-shadow:0 0 40px rgba(91,141,239,.15)}
+  .dl-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .dl-ico{font-size:26px}
+  .dl-head h3{font-size:19px;font-weight:800}
+  .dl-btn{display:block;background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff;border-radius:12px;padding:12px 14px;font-weight:700;font-size:14px;margin-bottom:8px;text-align:center;transition:transform .12s}
+  .dl-btn:active{transform:scale(.97)}
+  .dl-btn.ghost{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+  .dl-btn span{display:block;font-size:11px;font-weight:500;opacity:.8;margin-top:1px}
+  /* Happ-подобная таблица загрузок */
+  .os-table{max-width:760px;margin:0 auto;background:var(--card);border:1px solid rgba(255,255,255,.07);border-radius:18px;overflow:hidden}
+  .os-row{display:flex;align-items:center;gap:16px;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06)}
+  .os-row:last-child{border-bottom:none}
+  .os-name{display:flex;align-items:center;gap:10px;min-width:150px;font-weight:800;font-size:16px}
+  .os-name .dl-ico{font-size:22px}
+  .os-badges{display:flex;flex-wrap:wrap;gap:8px}
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:10px;font-weight:700;font-size:13px;background:#2b3350;color:#dfe6ff;transition:transform .12s}
+  .badge:active{transform:scale(.96)}
+  .badge b{background:#5b8def;color:#fff;padding:2px 7px;border-radius:6px;font-size:12px;font-weight:800}
+  .badge.mir b{background:#e0574a}
+  @media(max-width:560px){.os-row{flex-direction:column;align-items:flex-start}.os-name{min-width:0}}
+  footer{text-align:center;color:var(--muted);padding:60px 0 40px;font-size:14px}
+
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+  .modal.show{display:flex}
+  .modal-box{background:var(--card);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:28px;max-width:440px;width:100%}
+  .modal-box h3{font-size:20px;font-weight:800;margin-bottom:16px}
+  .field{width:100%;padding:13px 15px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:var(--text);font-size:15px;margin-bottom:12px;outline:none}
+  .sub-link{background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px;font-size:12px;word-break:break-all;color:var(--acc);margin-bottom:12px;font-family:monospace}
+  .imp{display:flex;gap:10px;flex-wrap:wrap}
+  .imp a{flex:1;min-width:120px;text-align:center;padding:12px;border-radius:12px;background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff;font-weight:700;font-size:14px}
+  .err{color:#f87171;font-size:13px;min-height:18px}
+  .dlcount{margin-top:22px;font-size:16px;color:var(--muted)}
+  .dlcount b{color:var(--acc);font-size:22px;font-weight:900}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">Jeff<span>TUN</span> VPN</div>
+    <div style="display:flex;gap:8px">
+      <a class="nav-btn" href="#download">Скачать</a>
+      <a class="nav-btn" onclick="openSub()">Моя подписка</a>
+    </div>
+  </header>
+
+  <section class="hero">
+    <h1>Быстрый VPN с <span>обходом блокировок</span></h1>
+    <p>8 протоколов из коробки. Поддержка REALITY и XTLS Vision — работает там, где остальные не проходят.</p>
+    <div class="cta">
+      <button class="btn primary" onclick="openSub()">📲 Подключить</button>
+      <a class="btn ghost" href="#protocols">Протоколы</a>
+    </div>
+    <div id="dlcount" class="dlcount">📥 <b id="dlnum">…</b> человек уже скачали</div>
+  </section>
+
+  <h2 class="section-title" id="protocols">Протоколы из коробки</h2>
+  <p class="section-sub">С поддержкой REALITY и XTLS Vision для обхода блокировок</p>
+  <div class="protocols">
+    <div class="proto"><h3>VLESS</h3><div class="tags"><span class="tag">reality</span><span class="tag">xtls</span></div></div>
+    <div class="proto"><h3>VMess</h3><div class="tags"><span class="tag">ws</span><span class="tag">grpc</span></div></div>
+    <div class="proto"><h3>Trojan</h3><div class="tags"><span class="tag">tls</span></div></div>
+    <div class="proto"><h3>Shadowsocks</h3><div class="tags"><span class="tag">aead</span></div></div>
+    <div class="proto"><h3>SOCKS5</h3><div class="tags"><span class="tag">auth</span></div></div>
+    <div class="proto"><h3>WireGuard</h3><div class="tags"><span class="tag">udp</span></div></div>
+    <div class="proto"><h3>Hysteria2</h3><div class="tags"><span class="tag">скоро</span></div></div>
+  </div>
+
+  <h2 class="section-title">Почему JeffTUN</h2>
+  <p class="section-sub">Всё что нужно для стабильного соединения</p>
+  <div class="feats">
+    <div class="feat"><div class="ico">⚡</div><h4>Высокая скорость</h4><p>Прямое подключение к серверу без лишних узлов</p></div>
+    <div class="feat"><div class="ico">🛡</div><h4>REALITY</h4><p>Маскировка под обычный HTTPS — не отличить от посещения сайта</p></div>
+    <div class="feat"><div class="ico">📱</div><h4>Любые устройства</h4><p>Happ, v2RayTun, Streisand, NekoBox — импорт одной ссылкой</p></div>
+    <div class="feat"><div class="ico">🔄</div><h4>Авто-обновление</h4><p>Подписка обновляется сама — новые серверы появляются автоматически</p></div>
+  </div>
+
+  <h2 class="section-title" id="download">Скачать приложение</h2>
+  <p class="section-sub">Выбери своё устройство — вставь ключ и подключись</p>
+
+  <div class="dl-grid">
+    <!-- iOS -->
+    <div class="dl-card">
+      <div class="dl-head"><span class="dl-ico">🍏</span><h3>iOS</h3></div>
+      <a class="dl-btn" href="https://apps.apple.com/app/happ-proxy-utility/id6504287215" target="_blank">App Store <span>Global</span></a>
+      <a class="dl-btn" href="https://apps.apple.com/ru/app/streisand/id6450534064" target="_blank">App Store <span>Rus</span></a>
+      <a class="dl-btn ghost" href="https://testflight.apple.com/join/gGCydjbY" target="_blank">TestFlight <span>Global · Rus</span></a>
+    </div>
+
+    <!-- Android -->
+    <div class="dl-card">
+      <div class="dl-head"><span class="dl-ico">🤖</span><h3>Android</h3></div>
+      <a class="dl-btn" href="https://play.google.com/store/apps/details?id=com.happproxy" target="_blank">Google Play</a>
+      <a class="dl-btn" href="https://github.com/Happ-proxy/happ-android/releases/latest" target="_blank">Download APK</a>
+      <a class="dl-btn ghost" href="https://github.com/Happ-proxy/happ-android/releases" target="_blank">Beta APK</a>
+    </div>
+
+    <!-- Desktop -->
+    <div class="dl-card">
+      <div class="dl-head"><span class="dl-ico">📺</span><h3>TV</h3></div>
+      <a class="dl-btn" href="https://play.google.com/store/apps/details?id=com.happproxy" target="_blank">Android TV</a>
+      <a class="dl-btn ghost" href="https://apps.apple.com/app/happ-proxy-utility/id6504287215" target="_blank">Apple TV</a>
+    </div>
+  </div>
+
+  <!-- Desktop: таблица как у Happ -->
+  <div class="os-table" style="margin-top:22px">
+    <div class="os-row">
+      <div class="os-name"><span class="dl-ico">🪟</span>Windows</div>
+      <div class="os-badges">
+        <a class="badge" href="https://github.com/kerimlirashad/kerimlirashad/releases/download/jefftun/JeffTUN.exe">Setup <b>x64</b></a>
+        <a class="badge mir" href="https://github.com/kerimlirashad/kerimlirashad/releases/download/jefftun/JeffTUN.exe">Setup <b>x64 (mirror)</b></a>
+      </div>
+    </div>
+    <div class="os-row">
+      <div class="os-name"><span class="dl-ico">🐧</span>Linux</div>
+      <div class="os-badges">
+        <a class="badge" href="https://github.com/kerimlirashad/kerimlirashad/releases/download/jefftun/JeffTUN-linux">Binary <b>x64</b></a>
+        <a class="badge mir" href="https://github.com/kerimlirashad/kerimlirashad/releases/download/jefftun/JeffTUN-linux">Binary <b>x64 (mirror)</b></a>
+      </div>
+    </div>
+    <div class="os-row">
+      <div class="os-name"><span class="dl-ico">📺</span>Android TV</div>
+      <div class="os-badges">
+        <a class="badge" href="https://github.com/Happ-proxy/happ-android/releases/latest" target="_blank">APK <b>sideload</b></a>
+        <a class="badge mir" href="https://play.google.com/store/apps/details?id=com.happproxy" target="_blank">Google <b>Play</b></a>
+      </div>
+    </div>
+  </div>
+  <p class="section-sub" style="max-width:640px;margin:8px auto 0;font-size:12px">
+    📺 На Android TV поставь совместимый клиент и вставь свой ключ / подписку JeffTUN — работает так же.
+  </p>
+  <p class="section-sub" style="max-width:640px;margin:16px auto 0;font-size:13px">
+    ⚠️ Windows покажет «SmartScreen защитил компьютер» — это нормально для новых программ без платной подписи.
+    Нажми <b>«Подробнее» → «Выполнить в любом случае»</b>. Приложение безопасно.
+  </p>
+
+  <h2 class="section-title">Поддержать приложение ❤️</h2>
+  <p class="section-sub">Помоги оплачивать серверы — спасибо, что ты с нами</p>
+  <div class="apps">
+    <a class="app" onclick="openDonate('card')">💳 Карты МИР / Visa</a>
+    <a class="app" onclick="openDonate('crypto')">₿ Crypto</a>
+  </div>
+
+  <footer>© 2026 JeffTUN VPN · <a onclick="openSub()" style="color:var(--acc)">Моя подписка</a></footer>
+</div>
+
+<!-- Donate modal -->
+<div class="modal" id="donate-modal">
+  <div class="modal-box">
+    <h3>Поддержать JeffTUN ❤️</h3>
+    <div id="donate-body" style="font-size:14px;color:var(--text)"></div>
+    <button class="btn ghost" style="width:100%;margin-top:14px" onclick="document.getElementById('donate-modal').classList.remove('show')">Закрыть</button>
+  </div>
+</div>
+
+<!-- Subscription modal -->
+<div class="modal" id="sub-modal">
+  <div class="modal-box">
+    <h3>📲 Моя подписка</h3>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:14px">Введи токен подписки, который тебе выдали:</p>
+    <input class="field" id="sub-token" placeholder="Токен подписки">
+    <button class="btn primary" style="width:100%" onclick="loadSub()">Показать</button>
+    <div class="err" id="sub-err"></div>
+    <div id="sub-result" style="display:none;margin-top:14px">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:6px">Ссылка-подписка:</p>
+      <div class="sub-link" id="sub-url"></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:6px">Открыть в приложении:</p>
+      <div class="imp" id="imp-links"></div>
+    </div>
+    <button class="btn ghost" style="width:100%;margin-top:12px" onclick="closeSub()">Закрыть</button>
+  </div>
+</div>
+
+<script>
+// Реквизиты для доната — ЗАМЕНИ на свои!
+const DONATE={
+  card:'Карта МИР / Visa:<br><b style="font-size:18px;color:var(--acc)">2200 0000 0000 0000</b><br><span style="color:var(--muted)">Получатель: Рашад К.</span>',
+  crypto:'USDT (TRC20):<br><b style="font-size:14px;color:var(--acc);word-break:break-all">TXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</b><br><br>BTC:<br><b style="font-size:14px;color:var(--acc);word-break:break-all">bc1qxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</b>',
+};
+function openDonate(t){
+  document.getElementById('donate-body').innerHTML=DONATE[t]||'';
+  document.getElementById('donate-modal').classList.add('show');
+}
+// Счётчик скачиваний напрямую с GitHub (открытый API)
+(async function(){
+  try{
+    const tags=['jefftun','qipcall-latest'];
+    let total=0;
+    for(const t of tags){
+      try{
+        const r=await fetch('https://api.github.com/repos/kerimlirashad/kerimlirashad/releases/tags/'+t);
+        const d=await r.json();
+        total+=(d.assets||[]).reduce((s,a)=>s+(a.download_count||0),0);
+      }catch{}
+    }
+    document.getElementById('dlnum').textContent=total.toLocaleString('ru');
+  }catch{ document.getElementById('dlcount').style.display='none'; }
+})();
+
+function openSub(){document.getElementById('sub-modal').classList.add('show')}
+function closeSub(){document.getElementById('sub-modal').classList.remove('show')}
+function loadSub(){
+  const t=document.getElementById('sub-token').value.trim();
+  const err=document.getElementById('sub-err');err.textContent='';
+  if(!t){err.textContent='Введите токен';return}
+  const url=`https://${location.hostname}:8443/sub/${t}`;
+  document.getElementById('sub-url').textContent=url;
+  const imp=document.getElementById('imp-links');
+  imp.innerHTML=`
+    <a href="happ://add/${encodeURIComponent(url)}">Happ</a>
+    <a href="v2raytun://import/${encodeURIComponent(url)}">v2RayTun</a>
+    <a href="streisand://import/${encodeURIComponent(url)}">Streisand</a>
+    <a href="${url}" target="_blank">Открыть</a>`;
+  document.getElementById('sub-result').style.display='block';
+}
+</script>
+</body>
+</html>

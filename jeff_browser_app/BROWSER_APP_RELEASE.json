@@ -1,0 +1,6 @@
+{
+  "version": "0.4",
+  "name": "Jeff Browser 0.4",
+  "url": "https://github.com/kerimlirashad/kerimlirashad/releases/tag/jeffbrowser",
+  "notes": "VPN в браузере теперь понимает все подписки (HWID, JSON, sing-box, base64)."
+}

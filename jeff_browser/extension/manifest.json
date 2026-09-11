@@ -1,0 +1,14 @@
+{
+  "manifest_version": 2,
+  "name": "Jeff",
+  "version": "1.0",
+  "description": "Стартовая страница и обновления Jeff",
+  "browser_specific_settings": { "gecko": { "id": "jeffnewtab@jeff" } },
+  "chrome_url_overrides": { "newtab": "newtab.html" },
+  "permissions": [ "tabs", "storage", "notifications", "https://raw.githubusercontent.com/*" ],
+  "background": { "scripts": ["background.js"], "persistent": false },
+  "browser_action": {
+    "default_title": "Jeff — проверить обновления",
+    "default_icon": { "16": "icon.png", "32": "icon.png", "48": "icon.png" }
+  }
+}

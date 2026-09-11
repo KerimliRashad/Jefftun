@@ -1,0 +1,16 @@
+# Генерируется из project.yml командой xcodegen — в репозитории не нужен.
+Zyng.xcodeproj/
+Zyng.xcworkspace/
+
+build/
+DerivedData/
+.DS_Store
+xcuserdata/
+*.xcuserstate
+
+# Ядра (sing-box + Xray): собираются ./build-core.sh, в git не хранятся (сотни МБ).
+Frameworks/
+.build/
+
+# Кэш модулей Go для сборки ядер.
+core/vendor/
