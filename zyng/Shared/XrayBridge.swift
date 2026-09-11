@@ -44,10 +44,18 @@ enum XrayBridge {
     /// Версия договора с libXray. Обязана совпадать с той, что зашита в ядре,
     /// иначе оно отвечает «unsupported apiVersion» и не делает ничего.
     ///
-    /// Была 1 — для libXray v1.260728.0. В v1.260909.0 стало 3, и заодно
-    /// поменялся способ запуска: отдельного runXrayFromJson больше нет, а
-    /// runXray теперь принимает сам конфиг в поле xrayJson, а не путь к файлу.
-    private static let apiVersion = 3
+    /// Здесь 1 — под libXray v1.260728.0, закреплённый в core/go.mod.
+    ///
+    /// Обновление до v1.260909.0 пришлось откатить. Сам модуль с ним собирался,
+    /// но сборка расширения падала на линковке:
+    ///
+    ///     Undefined symbol: _golang.org/x/net/http2.(*Transport)
+    ///
+    /// Не помогли ни полное удаление фреймворка, ни чистка кэша Go — символа
+    /// нет в самой библиотеке, которую отдаёт gomobile для новой версии ядра.
+    /// В той версии договор поднялся до 3, а runXrayFromJson исчез: если будем
+    /// обновляться снова, эти две правки нужно вернуть вместе.
+    private static let apiVersion = 1
 
     enum Failure: LocalizedError {
         case unavailable
@@ -267,12 +275,14 @@ enum XrayBridge {
     static func start(link: String) throws {
         let config = try makeConfig(from: link)
 
-        // Конфиг передаётся сам, а не путём к файлу.
+        // runXrayFromJson, а не runXray.
         //
-        // Раньше приходилось звать отдельный runXrayFromJson: обычный runXray
-        // принимал ПУТЬ, и ради него конфиг с паролем и UUID пришлось бы
-        // класть на диск. В новом ядре этой развилки нет.
-        try invoke(method: "runXray", payload: ["xrayJson": config])
+        // runXray в этой версии принимает ПУТЬ К ФАЙЛУ, а не сам конфиг — то же
+        // и у testXray. Значит, чтобы ими воспользоваться, конфиг пришлось бы
+        // класть на диск, а в нём пароль и UUID сервера. Держать это в файле
+        // ради проверки не стоит: ошибку конфигурации запуск возвращает и сам,
+        // с тем же текстом от ядра.
+        try invoke(method: "runXrayFromJson", payload: ["configJSON": config])
     }
 
     static func stop() {
