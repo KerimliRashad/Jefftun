@@ -453,11 +453,12 @@ struct ContentView: View {
 
     private var header: some View {
         HStack {
-            HStack(spacing: 9) {
-                ZyngLogo(size: 34)
-                Text("Zyng").font(.system(size: 19, weight: .heavy))
-                    .foregroundColor(JT.text)
-            }
+            // Логотип словом.
+            //
+            // Раньше здесь стояли значок-молния и рядом надпись «Zyng» —
+            // смысл повторялся дважды, а два разных объекта рядом дробили
+            // шапку. Теперь это один знак: буква Z и есть молния.
+            ZyngWordmark(capHeight: 21)
             Spacer()
 
             HStack(spacing: 10) {

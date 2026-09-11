@@ -55,3 +55,88 @@ struct ZyngLogo: View {
         .frame(width: size, height: size)
     }
 }
+
+
+// MARK: - Логотип словом
+
+/// Буква Z, у которой средняя диагональ — молния.
+///
+/// Это и есть весь замысел логотипа: знак и первая буква названия — одно и то
+/// же. Отдельная иконка-молния рядом со словом «Zyng» дублировала смысл дважды,
+/// а так название само себя и объясняет.
+///
+/// Рисуется одной ломаной с круглыми стыками: верхняя перекладина, диагональ с
+/// изломом посередине, нижняя перекладина. Излом небольшой — если сделать его
+/// заметнее, буква перестаёт читаться как Z и превращается в значок.
+struct ZyngZ: Shape {
+
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: rect.minX + w * x, y: rect.minY + h * y)
+        }
+
+        var line = Path()
+        line.move(to: point(0.10, 0.12))          // начало верхней перекладины
+        line.addLine(to: point(0.90, 0.12))       // верхняя перекладина
+        line.addLine(to: point(0.38, 0.46))       // диагональ вниз
+        line.addLine(to: point(0.62, 0.56))       // излом — та самая молния
+        line.addLine(to: point(0.10, 0.88))       // диагональ до низа
+        line.addLine(to: point(0.90, 0.88))       // нижняя перекладина
+
+        // Толщина в долях высоты: на любом размере буква одинаковой плотности.
+        return line.strokedPath(
+            StrokeStyle(lineWidth: h * 0.155, lineCap: .round, lineJoin: .round)
+        )
+    }
+}
+
+/// Логотип — всё слово целиком.
+///
+/// Первая буква рисуется фигурой, остальные — шрифтом. Смешивать так можно
+/// потому, что подобран один ритм: толщина штриха Z повторяет плотность
+/// начертания black, а высота выставлена по высоте прописных, а не по кеглю —
+/// иначе буква стояла бы выше соседок на треть.
+///
+/// Цвет — общий градиент на всё слово, а не на каждую букву отдельно: переход
+/// идёт слева направо через всю надпись, и она читается как единое целое.
+struct ZyngWordmark: View {
+
+    /// Высота прописных букв. От неё считается всё остальное.
+    var capHeight: CGFloat = 22
+
+    /// Тень-свечение под словом. На тёмном фоне добавляет глубины, на светлом
+    /// выглядит грязью — поэтому включается отдельно.
+    var glowing: Bool = true
+
+    private var gradient: LinearGradient {
+        LinearGradient(
+            colors: [JT.accent, Color(hex: "7A5CFF"), Color(hex: "B07CFF")],
+            startPoint: .leading, endPoint: .trailing
+        )
+    }
+
+    var body: some View {
+        // Кегль выводим из высоты прописных: у системного шрифта она примерно
+        // 0.72 кегля. Без этого пересчёта Z и «yng» разъезжаются по высоте.
+        let fontSize = capHeight / 0.72
+
+        HStack(alignment: .firstTextBaseline, spacing: capHeight * 0.12) {
+            ZyngZ()
+                .frame(width: capHeight * 0.82, height: capHeight)
+                // Выравниваем по базовой линии текста: фигура о шрифте ничего
+                // не знает, и без сдвига она «висела» бы над строкой.
+                .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+
+            Text("yng")
+                .font(.system(size: fontSize, weight: .black, design: .rounded))
+                // Плотнее обычного: у black начертания просветы между буквами
+                // широкие, и слово распадалось на отдельные знаки.
+                .tracking(-fontSize * 0.02)
+        }
+        .foregroundStyle(gradient)
+        .shadow(color: glowing ? JT.accent.opacity(0.35) : .clear,
+                radius: capHeight * 0.5, y: capHeight * 0.1)
+    }
+}
