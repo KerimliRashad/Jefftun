@@ -349,6 +349,20 @@ final class ServerStore: ObservableObject {
         }
     }
 
+    /// Писать ли в консоль подробности каждого запроса к панели.
+    ///
+    /// Эти строки нашли причину, из-за которой подписка отдавала нам старый
+    /// список: было видно, что под разными именами клиента панель присылает
+    /// разное — кому JSON-конфиг, кому шесть устаревших ss. Разобрались — и
+    /// теперь они только мешают читать журнал.
+    ///
+    /// Включаются тем же переключателем «Подробный журнал ядра» в настройках:
+    /// заводить ради этого отдельный незачем, случай один и тот же — что-то
+    /// пошло не так и надо посмотреть подробности.
+    private static var logsRequests: Bool {
+        AppSettings.shared.verboseLog
+    }
+
     /// Что удалось вытащить из ответа панели.
     private struct Profile {
         var keys: [String] = []
@@ -516,11 +530,13 @@ final class ServerStore: ObservableObject {
             do {
                 let (data, response) = try await URLSession.shared.data(for: request)
 
-                let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-                let type = (response as? HTTPURLResponse)?
-                    .value(forHTTPHeaderField: "Content-Type") ?? "—"
-                NSLog("🟣 Zyng подписка: %@ | %@ → %d, %d байт, %@",
-                      parsed.absoluteString, agent, code, data.count, type)
+                if Self.logsRequests {
+                    let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                    let type = (response as? HTTPURLResponse)?
+                        .value(forHTTPHeaderField: "Content-Type") ?? "—"
+                    NSLog("🟣 Zyng подписка: %@ | %@ → %d, %d байт, %@",
+                          parsed.absoluteString, agent, code, data.count, type)
+                }
 
                 if let http = response as? HTTPURLResponse,
                    !(200..<300).contains(http.statusCode) {
@@ -535,11 +551,13 @@ final class ServerStore: ObservableObject {
 
                 let body = String(decoding: data, as: UTF8.self)
                 let keys = expand(body)
-                let sample: String = keys.isEmpty
-                    ? ", начало ответа: "
-                        + String(body.prefix(160)).replacingOccurrences(of: "\n", with: " ")
-                    : ", первый: " + String((keys.first ?? "").prefix(40))
-                NSLog("🟣 Zyng подписка: ключей найдено %d%@", keys.count, sample)
+                if Self.logsRequests {
+                    let sample: String = keys.isEmpty
+                        ? ", начало ответа: "
+                            + String(body.prefix(160)).replacingOccurrences(of: "\n", with: " ")
+                        : ", первый: " + String((keys.first ?? "").prefix(40))
+                    NSLog("🟣 Zyng подписка: ключей найдено %d%@", keys.count, sample)
+                }
 
                 if keys.isEmpty {
                     // Ответ есть, ключей в нём нет — обычно это HTML-страница
@@ -562,8 +580,10 @@ final class ServerStore: ObservableObject {
                 if legacy == nil { legacy = profile }
                 continue
             } catch {
-                NSLog("🟣 Zyng подписка: %@ | %@ → ошибка %@",
-                      parsed.absoluteString, agent, (error as NSError).localizedDescription)
+                if Self.logsRequests {
+                    NSLog("🟣 Zyng подписка: %@ | %@ → ошибка %@",
+                          parsed.absoluteString, agent, (error as NSError).localizedDescription)
+                }
 
                 // Сеть недоступна — перебирать дальше бессмысленно.
                 //
