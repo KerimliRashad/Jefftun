@@ -47,6 +47,19 @@ fi
 
 cd "$SRC"
 
+# Граф зависимостей трогать нельзя.
+#
+# readonly запрещает Go менять go.mod и go.sum на ходу. Без этого любая
+# команда вправе «заодно» подтянуть версии повыше — и именно так здесь
+# сломалась сборка: обновление одного лишь Xray утащило за собой go 1.26→1.27,
+# golang.org/x/net 0.57→0.59 и ещё десяток пакетов. Новый x/net принёс
+# несовместимый http2, и расширение перестало линковаться:
+#
+#     Undefined symbol: _golang.org/x/net/http2.(*Transport)
+#
+# Версии ядер здесь закреплены намеренно и меняются только вручную.
+export GOFLAGS=-mod=readonly
+
 echo "→ Версии ядер:"
 echo "   sing-box: $(go list -m -f '{{.Version}}' github.com/sagernet/sing-box)"
 echo "   libXray:  $(go list -m -f '{{.Version}}' github.com/xtls/libxray)"
