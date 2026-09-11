@@ -111,21 +111,31 @@ gomobile bind -v \
 #
 # gomobile умеет завершиться с нулём, оставив неполный фреймворк, — и тогда
 # ошибка всплывает только в Xcode, спустя полчаса, в виде ненайденного символа.
-BIN="$(find "$OUT/Libcore.xcframework" -name Libcore -type f | head -1)"
-if [[ -z "$BIN" ]]; then
+# Проверяем ОБА среза: ios-arm64 для телефона и симуляторный.
+#
+# Брать первый попавшийся нельзя: find отдаёт симуляторный, а линковка падает
+# на телефонном — проверка радостно сообщала бы «всё на месте» при сломанной
+# сборке.
+SLICES=$(find "$OUT/Libcore.xcframework" -name Libcore -type f)
+if [[ -z "$SLICES" ]]; then
   echo "❌ Фреймворк собрался неполным: библиотеки внутри нет."
   exit 1
 fi
 
-if ! nm -a "$BIN" 2>/dev/null | grep -q "http2.(\*Transport)"; then
-  echo "❌ В библиотеке нет символов http2 — расширение не слинкуется."
-  echo "   Это признак несовместимой версии ядра Xray. Проверь core/go.mod."
-  exit 1
-fi
+for BIN in $SLICES; do
+  if ! nm -a "$BIN" 2>/dev/null | grep -q "http2.(\*Transport)"; then
+    echo "❌ В срезе $(basename "$(dirname "$(dirname "$BIN")")") нет символов http2 —"
+    echo "   расширение не слинкуется. Это признак несовместимой версии ядра"
+    echo "   Xray. Проверь core/go.mod."
+    exit 1
+  fi
+done
 
 echo ""
 echo "✅ Готово: $OUT/Libcore.xcframework"
-echo "   $(du -h "$BIN" | cut -f1), проверено на символы http2"
+for BIN in $SLICES; do
+  echo "   $(basename "$(dirname "$(dirname "$BIN")")"): $(du -h "$BIN" | cut -f1)"
+done
 echo ""
 echo "Дальше:  xcodegen && open Zyng.xcodeproj"
 echo ""

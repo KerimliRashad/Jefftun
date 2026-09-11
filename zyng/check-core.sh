@@ -27,27 +27,40 @@ if [[ ! -d "$FW" ]]; then
   exit 1
 fi
 
-BIN="$(find "$FW" -name Libcore -type f | head -1)"
-if [[ -z "$BIN" ]]; then
+# Проверяем КАЖДЫЙ срез, а не первый попавшийся.
+#
+# Во фреймворке их два: ios-arm64 для телефона и ios-arm64_x86_64-simulator
+# для симулятора. Первый же вариант find отдаёт симуляторный — а линковка
+# падает на телефонном, и проверка показывала «всё на месте» при сломанной
+# сборке. Ровно на этом я один раз и обманулся.
+SLICES=$(find "$FW" -name Libcore -type f)
+if [[ -z "$SLICES" ]]; then
   echo "   ❌ Внутри $FW нет библиотеки — сборка оборвалась на середине."
   echo "      Выполни заново:  ./build-core.sh"
   exit 1
 fi
 
-SIZE=$(du -h "$BIN" | cut -f1)
-WHEN=$(date -r "$BIN" "+%d.%m %H:%M" 2>/dev/null || echo "?")
-echo "   файл:   $BIN"
-echo "   размер: $SIZE"
-echo "   собран: $WHEN"
+BAD=0
+for BIN in $SLICES; do
+  SLICE=$(basename "$(dirname "$(dirname "$BIN")")")
+  SIZE=$(du -h "$BIN" | cut -f1)
+  WHEN=$(date -r "$BIN" "+%d.%m %H:%M" 2>/dev/null || echo "?")
 
-# Тот самый символ, на котором падала линковка после обновления Xray.
-if nm -a "$BIN" 2>/dev/null | grep -q "http2.(\*Transport)"; then
-  echo "   http2:  символы на месте"
-else
-  echo "   http2:  ⚠️ символов нет — линковка расширения упадёт"
-  echo "           Пересобери ядро:  ./build-core.sh"
+  if nm -a "$BIN" 2>/dev/null | grep -q "http2.(\*Transport)"; then
+    MARK="символы http2 на месте"
+  else
+    MARK="⚠️ символов http2 НЕТ — линковка упадёт"
+    BAD=1
+  fi
+
+  printf "   %-34s %6s  %s  %s\n" "$SLICE" "$SIZE" "$WHEN" "$MARK"
+done
+
+if [[ $BAD -eq 1 ]]; then
+  echo ""
+  echo "   Пересобери ядро:  ./build-core.sh"
 fi
 
 echo ""
-echo "Если «собран» — это время ДО последнего git pull, ядро устарело:"
+echo "Если время сборки — ДО последнего git pull, ядро устарело:"
 echo "изменения в исходниках попадут в приложение только после ./build-core.sh"
