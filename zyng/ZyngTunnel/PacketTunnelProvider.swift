@@ -11,6 +11,8 @@ import Libcore
 final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private var commandServer: LibboxCommandServer?
+    /// Отдаёт приложению скорость и объём трафика.
+    private var traffic: TrafficReporter?
     private var platform: PlatformInterface?
     /// Поднимали ли мы второе ядро — чтобы знать, кого гасить при остановке.
     private var usesXray = false
@@ -102,6 +104,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                     + "Обычно это значит, что не удалось соединиться с сервером."
                 )
             }
+
+            // Статистику заводим уже после того, как туннель поднят: раньше
+            // ядру нечего отдавать, а неудачная попытка подключиться к его
+            // служебному каналу только тратила бы время на запуске.
+            let traffic = TrafficReporter()
+            self.traffic = traffic
+            traffic.start()
 
             TunnelDiagnostics.note("туннель открыт — соединение установлено")
             NSLog("✅ Zyng: подключение установлено")
@@ -229,6 +238,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             try? commandServer.closeService()
             commandServer.close()
         }
+        traffic?.stop()
+        traffic = nil
+
         commandServer = nil
         platform = nil
 

@@ -218,6 +218,10 @@ struct ContentView: View {
     @State private var boltScale: CGFloat = 1
     @State private var pressed = false
 
+    /// Волна, расходящаяся от кнопки при поднятом туннеле.
+    @State private var pulse: CGFloat = 1
+    @State private var pulseFade: Double = 0
+
     /// Задержка, уже показанная в плашке на экране блокировки.
     @State private var lastReportedLatency: Int?
 
@@ -271,6 +275,10 @@ struct ContentView: View {
                 statusPill.padding(.top, 20)
                 timerLabel.padding(.top, 10)
                 pingLabel.padding(.top, 8)
+                trafficRow
+                    .padding(.top, 14)
+                    .padding(.horizontal, 20)
+                    .animation(.spring(response: 0.5, dampingFraction: 0.85), value: state)
                 // Своё сообщение: проверка сервера перед подключением.
                 //
                 // Показываем здесь же, где ошибки ядра, — человек смотрит в
@@ -497,6 +505,13 @@ struct ContentView: View {
                     .scaleEffect(glow)
                     .opacity(state == .off ? 0.5 : 1)
 
+                // Расходящаяся волна — поверх свечения, под дорожкой.
+                Circle()
+                    .stroke(color.opacity(pulseFade), lineWidth: 1.5)
+                    .frame(width: 236, height: 236)
+                    .scaleEffect(pulse)
+                    .allowsHitTesting(false)
+
                 // Неподвижная дорожка под дугами.
                 //
                 // Без неё кольца читались как две случайные чёрточки в пустоте:
@@ -642,6 +657,25 @@ struct ContentView: View {
         }
         withAnimation(.linear(duration: innerDuration).repeatForever(autoreverses: false)) {
             innerAngle = -360
+        }
+
+        // Волна расходится только при работающем туннеле.
+        //
+        // Это единственный на экране признак того, что защита живая, а не
+        // просто зелёная надпись. В покое её нет вовсе: движение без причины
+        // раздражает и сажает батарею.
+        if state == .on {
+            pulse = 1
+            pulseFade = 0.5
+            withAnimation(.easeOut(duration: 2.8).repeatForever(autoreverses: false)) {
+                pulse = 1.28
+                pulseFade = 0
+            }
+        } else {
+            withAnimation(.easeOut(duration: 0.4)) {
+                pulse = 1
+                pulseFade = 0
+            }
         }
 
         if state == .off {
@@ -886,6 +920,76 @@ struct ContentView: View {
             .transition(.opacity.combined(with: .move(edge: .top)))
             .animation(.easeOut(duration: 0.25), value: reason)
         }
+    }
+
+    /// Скорость и объём — то, ради чего люди смотрят на экран VPN.
+    ///
+    /// Цифры считает ядро, приложение их только читает: ядро живёт в отдельном
+    /// процессе и кладёт свежие значения в общую папку раз в секунду. Отсюда и
+    /// TimelineView — он перечитывает файл ровно с тем же шагом.
+    @ViewBuilder
+    private var trafficRow: some View {
+        if state == .on {
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                let stats = TrafficStats.load()
+                let live = stats.isFresh
+
+                HStack(spacing: 10) {
+                    trafficTile(
+                        icon: "arrow.down",
+                        color: JT.green,
+                        speed: live ? stats.downSpeed : 0,
+                        total: stats.downTotal
+                    )
+                    trafficTile(
+                        icon: "arrow.up",
+                        color: JT.accent,
+                        speed: live ? stats.upSpeed : 0,
+                        total: stats.upTotal
+                    )
+                }
+            }
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
+    private func trafficTile(icon: String, color: Color,
+                             speed: Int64, total: Int64) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(color)
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(color.opacity(0.14)))
+
+            VStack(alignment: .leading, spacing: 1) {
+                // Моноширинные цифры: иначе строка дёргается на каждом
+                // обновлении, потому что единица уже восьмёрки.
+                Text(formatSpeed(speed))
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundColor(JT.text)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+
+                Text(formatTraffic(total))
+                    .font(.system(size: 11))
+                    .foregroundColor(JT.sub)
+                    .monospacedDigit()
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(JT.card.opacity(0.75))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(JT.stroke.opacity(0.6), lineWidth: 1)
+                )
+        )
+        .animation(.easeOut(duration: 0.35), value: speed)
     }
 
     /// Зелёный до 100 мс, жёлтый до 250, дальше красный.
