@@ -67,7 +67,7 @@ enum SingBoxConfig {
                 // OneXray.
             ]
         } else {
-            outbound = pinningAddress(of: try makeOutbound(from: key))
+            outbound = try makeOutbound(from: key)
         }
 
         // Журнал ядра — в файл, явно.
@@ -133,10 +133,15 @@ enum SingBoxConfig {
                         "detour": "proxy"
                     ],
                     [
-                        // Системный резолвер. Адрес самого VPN-сервера через
-                        // него больше НЕ разрешается — мы подставляем ядру
-                        // готовый адрес ниже, в makeOutbound. Здесь он остался
-                        // только как запасной путь для служебных нужд ядра.
+                        // Системный резолвер — им ядро разрешает имя самого
+                        // VPN-сервера, пока туннеля ещё нет.
+                        //
+                        // Системный он намеренно. На сотовой связи телефону
+                        // выдают только IPv6, а до IPv4-серверов пускают через
+                        // NAT64 — подставить нужный адрес умеет лишь система,
+                        // и только по имени. Свой резолвер здесь всё сломал бы:
+                        // он вернул бы настоящий IPv4, к которому в такой сети
+                        // нет маршрута.
                         "type": "local",
                         "tag": "dns-direct"
                     ]
@@ -215,149 +220,28 @@ enum SingBoxConfig {
         throw ParseError.malformed("нет адреса сервера")
     }
 
-    /// Подставляет в выход уже разрешённый адрес вместо имени.
-    ///
-    /// Это ключевое место. Имя сервера разрешал сам ядро — через системный
-    /// резолвер, то есть через DNS оператора связи. Оператор отвечал неправду:
-    ///
-    ///     dns: lookup succeed for node.kerimlicorp.com: 76.13.79.233
-    ///
-    /// 76.13.79.233 принадлежит Verizon — оператору самого телефона. Сервера с
-    /// флагом Латвии в американской сети оператора не стоит; это подменённый
-    /// ответ. Ядро честно шло по нему и упиралось в тишину, и так на КАЖДОМ
-    /// сервере подписки разом — при полностью живых серверах и рабочем ключе,
-    /// который в других клиентах подключается.
-    ///
-    /// Теперь имя разрешаем сами, по HTTPS, минуя оператора (см. SecureDNS), и
-    /// отдаём ядру числовой адрес. Имя при этом не теряется: оно остаётся в
-    /// server_name для TLS — без него проверка сертификата и Reality сломались
-    /// бы, ведь сервер предъявляет сертификат на имя, а не на адрес.
-    private static func pinningAddress(of outbound: [String: Any]) -> [String: Any] {
-        guard let host = outbound["server"] as? String,
-              !host.isEmpty,
-              !SecureDNS.isNumeric(host) else {
-            return outbound
-        }
-
-        let addresses = SecureDNS.resolveSync(host)
-        guard !addresses.isEmpty else {
-            // Не разрешилось — оставляем как было. Пусть лучше попробует ядро,
-            // чем мы отдадим ему выход без адреса.
-            TunnelDiagnostics.note("имя \(host) не разрешилось — отдаю ядру как есть")
-            return outbound
-        }
-
-        // Берём не первый попавшийся, а тот, который отвечает.
-        //
-        // За одним именем часто стоит несколько адресов, и живы не все: часть
-        // может быть выключена, часть — заблокирована в этой сети. Ядру же мы
-        // отдаём ровно один, и промах здесь означает «подключено, трафика
-        // нет». Поэтому спрашиваем каждый по очереди, коротко.
-        let port = (outbound["server_port"] as? Int) ?? 443
-        let alive = addresses.first { reachable($0, port: port, timeout: 1.5) }
-        let address = alive
-            ?? addresses.first(where: { !$0.contains(":") })
-            ?? addresses[0]
-
-        TunnelDiagnostics.note("адрес сервера: \(host) → \(address):\(port) "
-                             + "(\(SecureDNS.lastSource(for: host)))")
-
-        // Отдельной строкой, потому что это важнее всего остального в дневнике.
-        //
-        // Если сервер не отвечает ещё ДО поднятия туннеля — дальше можно не
-        // читать: ядро, маршруты и ключ ни при чём, соединения просто нет.
-        if alive == nil {
-            TunnelDiagnostics.note("ВНИМАНИЕ: \(address):\(port) не принимает соединение "
-                                 + "(проверено напрямую, до туннеля). "
-                                 + "Ни ядро, ни ключ на это не влияют.")
-        }
-
-        var result = outbound
-        result["server"] = address
-
-        // Имя — в TLS, иначе сервер не узнает, за каким сертификатом пришли.
-        if var tls = result["tls"] as? [String: Any] {
-            if (tls["server_name"] as? String)?.isEmpty ?? true {
-                tls["server_name"] = host
-            }
-            result["tls"] = tls
-        }
-
-        // И в заголовок Host у транспортов поверх HTTP: сервер разбирает
-        // запрос по нему, а с голым адресом отдал бы чужую страницу.
-        if var transport = result["transport"] as? [String: Any] {
-            let kind = transport["type"] as? String ?? ""
-            if ["ws", "http", "httpupgrade"].contains(kind) {
-                if var headers = transport["headers"] as? [String: Any] {
-                    if headers["Host"] == nil { headers["Host"] = host }
-                    transport["headers"] = headers
-                } else if transport["host"] == nil {
-                    transport["headers"] = ["Host": host]
-                }
-            }
-            result["transport"] = transport
-        }
-
-        return result
-    }
-
-    /// Отвечает ли адрес на этом порту. Обычный сокет, без сторонних средств:
-    /// в расширении нам доступен только он, и большего здесь не нужно.
-    private static func reachable(_ address: String, port: Int, timeout: TimeInterval) -> Bool {
-        let isIPv6 = address.contains(":")
-        let family = isIPv6 ? AF_INET6 : AF_INET
-
-        let fd = socket(family, SOCK_STREAM, 0)
-        guard fd >= 0 else { return false }
-        defer { close(fd) }
-
-        // Неблокирующий режим: иначе connect ждёт своё, а не наше время.
-        let flags = fcntl(fd, F_GETFL, 0)
-        _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
-
-        var connecting = false
-        if isIPv6 {
-            var addr = sockaddr_in6()
-            addr.sin6_len = UInt8(MemoryLayout<sockaddr_in6>.size)
-            addr.sin6_family = sa_family_t(AF_INET6)
-            addr.sin6_port = in_port_t(UInt16(port).bigEndian)
-            guard inet_pton(AF_INET6, address, &addr.sin6_addr) == 1 else { return false }
-            connecting = withUnsafePointer(to: &addr) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in6>.size)) == 0 || errno == EINPROGRESS
-                }
-            }
-        } else {
-            var addr = sockaddr_in()
-            addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-            addr.sin_family = sa_family_t(AF_INET)
-            addr.sin_port = in_port_t(UInt16(port).bigEndian)
-            guard inet_pton(AF_INET, address, &addr.sin_addr) == 1 else { return false }
-            connecting = withUnsafePointer(to: &addr) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0 || errno == EINPROGRESS
-                }
-            }
-        }
-        guard connecting else { return false }
-
-        var poller = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
-        guard poll(&poller, 1, Int32(timeout * 1000)) > 0 else { return false }
-
-        // POLLOUT сам по себе ещё не успех: отказ тоже будит poll. Настоящий
-        // ответ — нулевая ошибка на сокете.
-        var error: Int32 = 0
-        var length = socklen_t(MemoryLayout<Int32>.size)
-        guard getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &length) == 0 else { return false }
-        return error == 0
-    }
+    // Подстановка готового адреса вместо имени отсюда УБРАНА.
+    //
+    // Она появилась против подмены DNS оператором — версия оказалась неверной:
+    // защищённый резолвер вернул ровно тот же адрес, что и оператор. А вред
+    // выяснился позже и был серьёзным.
+    //
+    // Сотовые сети раздают телефону только IPv6, а до IPv4-серверов пускают
+    // через NAT64: система подставляет нужный адрес сама, но делает это ТОЛЬКО
+    // когда ей дают имя. Готовому числовому IPv4 помочь нечем — маршрута к нему
+    // в такой сети нет. Отсюда и картина «на Wi-Fi работает, на 5G ни один
+    // сервер не отвечает».
+    //
+    // Имя разрешает само ядро через dns-direct, и оно же попадает в TLS. Наш
+    // резолвер остался ровно для одного — узнать адреса, чтобы исключить их из
+    // маршрутов туннеля; там нужны именно числа.
 
     /// Числовые адреса имени: (IPv4, IPv6).
     ///
-    /// Через собственный защищённый резолвер, а НЕ через getaddrinfo.
-    /// getaddrinfo спрашивает DNS оператора, а тот подменяет ответы: имена
-    /// серверов подписки разрешались в адреса самого оператора, и соединение
-    /// уходило в никуда. Подробности — в SecureDNS.
+    /// Нужны ровно для одного — исключить сервер из маршрутов туннеля. Там без
+    /// чисел никак: маршрут задаётся адресом, а не именем.
+    ///
+    /// Подключаться по этим числам НЕЛЬЗЯ — см. пояснение выше про NAT64.
     static func resolve(_ host: String) -> (v4: [String], v6: [String]) {
         let addresses = SecureDNS.resolveSync(host)
         return (addresses.filter { !$0.contains(":") },
