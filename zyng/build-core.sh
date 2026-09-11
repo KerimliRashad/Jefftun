@@ -123,10 +123,12 @@ if [[ -z "$SLICES" ]]; then
 fi
 
 for BIN in $SLICES; do
-  if ! nm -a "$BIN" 2>/dev/null | grep -q "http2.(\*Transport)"; then
-    echo "❌ В срезе $(basename "$(dirname "$(dirname "$BIN")")") нет символов http2 —"
-    echo "   расширение не слинкуется. Это признак несовместимой версии ядра"
-    echo "   Xray. Проверь core/go.mod."
+  # nm -u печатает только НЕРАЗРЕШЁННЫЕ ссылки. Любая из них про http2
+  # означает, что расширение не слинкуется.
+  if nm -u "$BIN" 2>/dev/null | grep -q "http2\."; then
+    echo "❌ В срезе $(basename "$(dirname "$(dirname "$BIN")")") остались"
+    echo "   неразрешённые ссылки на http2 — расширение не слинкуется."
+    echo "   Это признак несовместимой версии ядра Xray. Проверь core/go.mod."
     exit 1
   fi
 done
