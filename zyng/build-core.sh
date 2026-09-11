@@ -107,8 +107,25 @@ gomobile bind -v \
 # плоский бандл. Без этого сборка падает на этапе встраивания.
 "$ROOT/flatten-framework.sh" Libcore
 
+# Проверяем результат, а не верим на слово.
+#
+# gomobile умеет завершиться с нулём, оставив неполный фреймворк, — и тогда
+# ошибка всплывает только в Xcode, спустя полчаса, в виде ненайденного символа.
+BIN="$(find "$OUT/Libcore.xcframework" -name Libcore -type f | head -1)"
+if [[ -z "$BIN" ]]; then
+  echo "❌ Фреймворк собрался неполным: библиотеки внутри нет."
+  exit 1
+fi
+
+if ! nm -a "$BIN" 2>/dev/null | grep -q "http2.(\*Transport)"; then
+  echo "❌ В библиотеке нет символов http2 — расширение не слинкуется."
+  echo "   Это признак несовместимой версии ядра Xray. Проверь core/go.mod."
+  exit 1
+fi
+
 echo ""
 echo "✅ Готово: $OUT/Libcore.xcframework"
+echo "   $(du -h "$BIN" | cut -f1), проверено на символы http2"
 echo ""
 echo "Дальше:  xcodegen && open Zyng.xcodeproj"
 echo ""

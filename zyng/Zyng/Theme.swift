@@ -121,6 +121,48 @@ enum JT {
     }
 }
 
+// MARK: - Оформление карточек
+
+/// Общий вид всех карточек приложения.
+///
+/// Раньше каждая карточка задавала фон и обводку сама, и они разъехались:
+/// где-то радиус 14, где-то 18, обводка то есть, то нет. Здесь это собрано в
+/// одно место — и заодно добавлено то, чего не хватало для глубины: блик по
+/// верхней кромке и мягкая тень. Приём простой: свет падает сверху, поэтому
+/// верхняя грань светлее нижней. Без него карточка выглядит плоской наклейкой.
+struct JTCard: ViewModifier {
+    var radius: CGFloat = 18
+    var highlighted: Bool = false
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(highlighted ? JT.cardHi : JT.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [JT.text.opacity(0.10), JT.stroke.opacity(0.55)],
+                            startPoint: .top, endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            // Тень мягкая и почти незаметная: на тёмном фоне сильная тень
+            // превращается в грязное пятно, а нужна только отделённость.
+            .shadow(color: .black.opacity(ThemeState.isBlack ? 0.35 : 0.22),
+                    radius: 14, x: 0, y: 6)
+    }
+}
+
+extension View {
+    func jtCard(radius: CGFloat = 18, highlighted: Bool = false) -> some View {
+        modifier(JTCard(radius: radius, highlighted: highlighted))
+    }
+}
+
 #if canImport(UIKit)
 private extension UIColor {
     convenience init(hexString: String) {

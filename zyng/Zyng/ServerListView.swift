@@ -443,7 +443,13 @@ struct ServerListView: View {
         let isSelected = server.raw == store.selectedRaw
 
         return HStack(spacing: 12) {
-            Text(server.flag).font(.system(size: 22))
+            Text(server.flag)
+                .font(.system(size: 20))
+                .frame(width: 38, height: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(JT.bg2)
+                )
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(server.name)
@@ -498,12 +504,25 @@ struct ServerListView: View {
             }
         }
         .padding(12)
+        // Выбранную строку обводим зелёным — это её единственное отличие,
+        // и оно должно читаться с одного взгляда. Остальные берут общий вид
+        // карточки: блик сверху, мягкая тень, одинаковый радиус.
         .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(isSelected ? JT.cardHi : JT.bg2)
-                .overlay(RoundedRectangle(cornerRadius: 14)
-                    .stroke(isSelected ? JT.green.opacity(0.4) : JT.stroke, lineWidth: 1))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(isSelected ? JT.cardHi : JT.card)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(
+                    isSelected
+                        ? AnyShapeStyle(JT.green.opacity(0.45))
+                        : AnyShapeStyle(LinearGradient(
+                            colors: [JT.text.opacity(0.08), JT.stroke.opacity(0.5)],
+                            startPoint: .top, endPoint: .bottom)),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
         .contentShape(Rectangle())
         .onTapGesture {
             jtHaptic()

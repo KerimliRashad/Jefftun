@@ -415,12 +415,21 @@ struct ContentView: View {
             }
         }()
 
-        return RadialGradient(
-            colors: [color.opacity(state == .off ? 0.10 : 0.28), .clear],
-            center: .center,
-            startRadius: 0,
-            endRadius: 340
-        )
+        // Два слоя, а не один.
+        //
+        // Одиночное пятно давало ровный ореол — аккуратно, но безжизненно.
+        // Второй, узкий и более плотный, собирает свет в центре, под самой
+        // кнопкой, и экран перестаёт выглядеть плоской заливкой.
+        return ZStack {
+            RadialGradient(
+                colors: [color.opacity(state == .off ? 0.10 : 0.26), .clear],
+                center: .center, startRadius: 0, endRadius: 340
+            )
+            RadialGradient(
+                colors: [color.opacity(state == .off ? 0.06 : 0.22), .clear],
+                center: .center, startRadius: 0, endRadius: 150
+            )
+        }
         .frame(height: 620)
         .blur(radius: 60)
         // Кнопка стоит выше середины экрана — свечение держим под ней.
@@ -864,14 +873,15 @@ struct ContentView: View {
                     .disabled(rescuing)
                 }
             }
-            .padding(13)
+            .padding(14)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(JT.red.opacity(0.10))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(JT.red.opacity(0.28), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(JT.red.opacity(0.30), lineWidth: 1)
                     )
+                    .shadow(color: JT.red.opacity(0.18), radius: 14, y: 6)
             )
             .transition(.opacity.combined(with: .move(edge: .top)))
             .animation(.easeOut(duration: 0.25), value: reason)
@@ -912,7 +922,18 @@ struct ContentView: View {
     private var locationButton: some View {
         Button { showList = true } label: {
             HStack(spacing: 14) {
-                Text(selected?.flag ?? "🌐").font(.system(size: 30))
+                // Флаг в скруглённой подложке.
+                //
+                // Сам по себе эмодзи висел в воздухе и читался как случайный
+                // символ. Подложка делает из него опорную точку слева — так же,
+                // как на плашке экрана блокировки.
+                Text(selected?.flag ?? "🌐")
+                    .font(.system(size: 26))
+                    .frame(width: 46, height: 46)
+                    .background(
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .fill(JT.cardHi)
+                    )
                 VStack(alignment: .leading, spacing: 3) {
                     Text(selected?.name ?? tr("Сервер не выбран", "No server selected"))
                         .foregroundColor(JT.text)
@@ -952,8 +973,7 @@ struct ContentView: View {
                 Image(systemName: "chevron.right").foregroundColor(JT.sub)
             }
             .padding(16)
-            .background(RoundedRectangle(cornerRadius: 18).fill(JT.card)
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(JT.stroke, lineWidth: 1)))
+            .jtCard()
         }
         .buttonStyle(.plain)
     }
